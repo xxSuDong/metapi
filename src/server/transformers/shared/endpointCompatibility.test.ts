@@ -18,6 +18,10 @@ describe('inferRequiredEndpointFromProtocolError', () => {
     expect(inferRequiredEndpointFromProtocolError('{"error":{"message":"input is required"}}')).toBe('responses');
   });
 
+  it('recognizes responses input errors from upstream detail fields', () => {
+    expect(inferRequiredEndpointFromProtocolError('{"detail":"Unsupported parameter: previous_response_id"}')).toBe('responses');
+  });
+
   it('ignores unrelated protocol errors', () => {
     expect(inferRequiredEndpointFromProtocolError('unsupported endpoint')).toBeNull();
     expect(inferRequiredEndpointFromProtocolError('')).toBeNull();

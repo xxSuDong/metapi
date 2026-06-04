@@ -16,6 +16,7 @@ const { apiMock, openMock, focusMock, confirmMock, promptMock } = vi.hoisted(() 
     rebindOAuthConnection: vi.fn(),
     updateOAuthConnectionProxy: vi.fn(),
     deleteOAuthConnection: vi.fn(),
+    deleteOAuthConnectionsBatch: vi.fn(),
     importOAuthConnections: vi.fn(),
     createOAuthRouteUnit: vi.fn(),
     deleteOAuthRouteUnit: vi.fn(),
@@ -2614,6 +2615,97 @@ describe('OAuthManagement page', () => {
 
       expect(confirmMock).toHaveBeenCalled();
       expect(apiMock.deleteOAuthConnection).toHaveBeenCalledWith(7);
+      expect(apiMock.getOAuthConnections).toHaveBeenCalledTimes(2);
+    } finally {
+      root?.unmount();
+    }
+  });
+
+  it('uses the server-side batch endpoint when deleting selected oauth connections', async () => {
+    apiMock.getOAuthProviders.mockResolvedValue({
+      providers: [
+        {
+          provider: 'codex',
+          label: 'Codex',
+          platform: 'codex',
+          enabled: true,
+          loginType: 'oauth',
+          requiresProjectId: false,
+          supportsDirectAccountRouting: true,
+          supportsCloudValidation: true,
+          supportsNativeProxy: true,
+        },
+      ],
+    });
+    apiMock.getOAuthConnections
+      .mockResolvedValueOnce({
+        items: [
+          {
+            accountId: 7,
+            provider: 'codex',
+            email: 'codex-one@example.com',
+            modelCount: 1,
+            modelsPreview: ['gpt-5.4'],
+            status: 'healthy',
+          },
+          {
+            accountId: 8,
+            provider: 'codex',
+            email: 'codex-two@example.com',
+            modelCount: 1,
+            modelsPreview: ['gpt-5.4'],
+            status: 'healthy',
+          },
+        ],
+        total: 2,
+        limit: 100,
+        offset: 0,
+      })
+      .mockResolvedValueOnce({ items: [], total: 0, limit: 100, offset: 0 });
+    apiMock.deleteOAuthConnectionsBatch.mockResolvedValue({
+      success: true,
+      deleted: 2,
+      failed: 0,
+      items: [
+        { accountId: 7, success: true },
+        { accountId: 8, success: true },
+      ],
+    });
+
+    let root!: WebTestRenderer;
+    try {
+      await act(async () => {
+        root = create(
+          <ToastProvider>
+            <MemoryRouter>
+              <OAuthManagement />
+            </MemoryRouter>
+          </ToastProvider>,
+        );
+      });
+      await vi.waitFor(async () => {
+        await flushMicrotasks();
+        expect(collectText(root!.root)).toContain('codex-one@example.com');
+        expect(collectText(root!.root)).toContain('codex-two@example.com');
+      });
+
+      const checkboxes = root!.root.findAll((node) => (
+        node.type === 'input'
+        && node.props.type === 'checkbox'
+        && typeof node.props.onChange === 'function'
+      ));
+      const rowCheckboxes = checkboxes.filter((node) => node.props.checked === false).slice(0, 2);
+      expect(rowCheckboxes).toHaveLength(2);
+      await act(async () => {
+        rowCheckboxes[0].props.onChange({ target: { checked: true } });
+        rowCheckboxes[1].props.onChange({ target: { checked: true } });
+      });
+      await flushMicrotasks();
+
+      await clickButton(root!, '批量删除');
+
+      expect(apiMock.deleteOAuthConnectionsBatch).toHaveBeenCalledWith([7, 8]);
+      expect(apiMock.deleteOAuthConnection).not.toHaveBeenCalled();
       expect(apiMock.getOAuthConnections).toHaveBeenCalledTimes(2);
     } finally {
       root?.unmount();

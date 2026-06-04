@@ -16,6 +16,8 @@ const ROUTING_REFERENCE_USAGE = {
   completionTokens: 500_000,
   totalTokens: 1_000_000,
 };
+const ANTHROPIC_CACHE_READ_RATIO = 0.1;
+const ANTHROPIC_CACHE_CREATION_RATIO = 1.25;
 
 export interface PricingModel {
   modelName: string;
@@ -207,6 +209,53 @@ function normalizeRatio(value: unknown, fallback: number): number {
   return fallback;
 }
 
+function hasExplicitRatio(value: unknown): boolean {
+  const ratio = toNumber(value, Number.NaN);
+  return Number.isFinite(ratio) && ratio >= 0;
+}
+
+function isAnthropicClaudeModel(modelName: string): boolean {
+  const normalized = modelName.trim().toLowerCase();
+  return normalized === 'claude' || normalized.startsWith('claude-');
+}
+
+function normalizeCacheRatioForModel(modelName: string, value: unknown): number {
+  return normalizeRatio(
+    value,
+    isAnthropicClaudeModel(modelName) ? ANTHROPIC_CACHE_READ_RATIO : 1,
+  );
+}
+
+function normalizeCacheCreationRatioForModel(modelName: string, value: unknown): number {
+  return normalizeRatio(
+    value,
+    isAnthropicClaudeModel(modelName) ? ANTHROPIC_CACHE_CREATION_RATIO : 1,
+  );
+}
+
+function getRawCacheRatio(raw: Record<string, unknown>): unknown {
+  return raw.cache_ratio ?? raw.cacheRatio;
+}
+
+function getRawCacheCreationRatio(raw: Record<string, unknown>): unknown {
+  return raw.cache_creation_ratio
+    ?? raw.cacheCreationRatio
+    ?? raw.create_cache_ratio
+    ?? raw.createCacheRatio;
+}
+
+function applyAnthropicCacheDefaultsToIncompleteClaudeOverride(
+  modelName: string,
+  override: ProxyBillingPricingOverride,
+): ProxyBillingPricingOverride {
+  if (!isAnthropicClaudeModel(modelName)) return override;
+  return {
+    ...override,
+    cacheRatio: hasExplicitRatio(override.cacheRatio) ? override.cacheRatio : ANTHROPIC_CACHE_READ_RATIO,
+    cacheCreationRatio: hasExplicitRatio(override.cacheCreationRatio) ? override.cacheCreationRatio : ANTHROPIC_CACHE_CREATION_RATIO,
+  };
+}
+
 function normalizePricingModels(rawModels: unknown[]): Map<string, PricingModel> {
   const models = new Map<string, PricingModel>();
 
@@ -219,16 +268,13 @@ function normalizePricingModels(rawModels: unknown[]): Map<string, PricingModel>
     const quotaType = toPositiveInt((raw as any).quota_type);
     const modelRatio = toNumber((raw as any).model_ratio, 1);
     const completionRatio = toNumber((raw as any).completion_ratio, 1);
-    const cacheRatio = normalizeRatio(
-      (raw as any).cache_ratio ?? (raw as any).cacheRatio,
-      1,
+    const cacheRatio = normalizeCacheRatioForModel(
+      modelName,
+      getRawCacheRatio(raw as Record<string, unknown>),
     );
-    const cacheCreationRatio = normalizeRatio(
-      (raw as any).cache_creation_ratio
-        ?? (raw as any).cacheCreationRatio
-        ?? (raw as any).create_cache_ratio
-        ?? (raw as any).createCacheRatio,
-      1,
+    const cacheCreationRatio = normalizeCacheCreationRatioForModel(
+      modelName,
+      getRawCacheCreationRatio(raw as Record<string, unknown>),
     );
     const enableGroupsRaw = (raw as any).enable_groups;
     const enableGroups = Array.isArray(enableGroupsRaw)
@@ -600,14 +646,15 @@ function buildPricingOverrideModel(
   pricingOverride: ProxyBillingPricingOverride,
 ): { model: PricingModel; groupRatio: Record<string, number> } {
   const groupRatio = normalizeRatio(pricingOverride.groupRatio, 1);
+  const normalizedOverride = applyAnthropicCacheDefaultsToIncompleteClaudeOverride(modelName, pricingOverride);
   return {
     model: {
       modelName,
       quotaType: 0,
-      modelRatio: normalizeRatio(pricingOverride.modelRatio, 1),
-      completionRatio: normalizeRatio(pricingOverride.completionRatio, 1),
-      cacheRatio: normalizeRatio(pricingOverride.cacheRatio, 1),
-      cacheCreationRatio: normalizeRatio(pricingOverride.cacheCreationRatio, 1),
+      modelRatio: normalizeRatio(normalizedOverride.modelRatio, 1),
+      completionRatio: normalizeRatio(normalizedOverride.completionRatio, 1),
+      cacheRatio: normalizeRatio(normalizedOverride.cacheRatio, 1),
+      cacheCreationRatio: normalizeRatio(normalizedOverride.cacheCreationRatio, 1),
       modelPrice: null,
       enableGroups: [DEFAULT_GROUP],
     },

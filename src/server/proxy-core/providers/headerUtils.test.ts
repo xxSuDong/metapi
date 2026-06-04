@@ -74,6 +74,25 @@ describe('provider header utils', () => {
     expect(headers.Accept).toBe('application/json');
   });
 
+  it('uses a current Codex client identity when oauth requests lack client headers', async () => {
+    const { buildCodexRuntimeHeaders } = await import('./headerUtils.js');
+
+    const headers = buildCodexRuntimeHeaders({
+      baseHeaders: {
+        authorization: 'Bearer test',
+      },
+      providerHeaders: {
+        originator: 'codex_cli_rs',
+      },
+      stream: true,
+      continuityKey: 'cache-key-1',
+      explicitSessionId: null,
+    });
+
+    expect(headers.Version).toBe('0.137.0');
+    expect(headers['User-Agent']).toContain('codex_cli_rs/0.137.0');
+  });
+
   it('builds claude runtime headers with merged betas and oauth bearer auth', async () => {
     const { buildClaudeRuntimeHeaders } = await import('./headerUtils.js');
 

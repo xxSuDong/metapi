@@ -2134,6 +2134,60 @@ describe('oauth routes', { timeout: 15_000 }, () => {
     expect(accounts).toEqual([]);
   });
 
+  it('batch deletes oauth connections with a single route rebuild', async () => {
+    const site = await db.insert(schema.sites).values({
+      name: 'Codex OAuth',
+      url: 'https://chatgpt.com/backend-api/codex',
+      platform: 'codex',
+      status: 'active',
+    }).returning().get();
+    const first = await db.insert(schema.accounts).values({
+      siteId: site.id,
+      username: 'codex-one@example.com',
+      accessToken: 'oauth-access-token-1',
+      status: 'active',
+      oauthProvider: 'codex',
+      oauthAccountKey: 'chatgpt-account-1',
+      extraConfig: JSON.stringify({ oauth: { provider: 'codex', accountId: 'chatgpt-account-1' } }),
+    }).returning().get();
+    const second = await db.insert(schema.accounts).values({
+      siteId: site.id,
+      username: 'codex-two@example.com',
+      accessToken: 'oauth-access-token-2',
+      status: 'active',
+      oauthProvider: 'codex',
+      oauthAccountKey: 'chatgpt-account-2',
+      extraConfig: JSON.stringify({ oauth: { provider: 'codex', accountId: 'chatgpt-account-2' } }),
+    }).returning().get();
+
+    const routeRefreshWorkflow = await import('../../services/routeRefreshWorkflow.js');
+    const rebuildSpy = vi.spyOn(routeRefreshWorkflow, 'rebuildRoutesOnly');
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/oauth/connections/delete-batch',
+        payload: { accountIds: [first.id, second.id] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        success: true,
+        deleted: 2,
+        failed: 0,
+        items: [
+          { accountId: first.id, success: true },
+          { accountId: second.id, success: true },
+        ],
+      });
+      expect(rebuildSpy).toHaveBeenCalledTimes(1);
+      const accounts = await db.select().from(schema.accounts).all();
+      expect(accounts).toEqual([]);
+    } finally {
+      rebuildSpy.mockRestore();
+    }
+  });
+
   it('refreshes oauth quota snapshots and marks unsupported providers explicitly', async () => {
     const codexSite = await db.insert(schema.sites).values({
       name: 'ChatGPT Codex OAuth',
@@ -3943,6 +3997,44 @@ describe('oauth routes', { timeout: 15_000 }, () => {
     expect(connectionsResponse.statusCode).toBe(200);
     const items = (connectionsResponse.json() as { items: Array<{ routeParticipation?: { kind?: string } | null }> }).items;
     expect(items.every((item) => item.routeParticipation?.kind !== 'route_unit')).toBe(true);
+  });
+
+  it('reports expired oauth account rows as abnormal in the connection list', async () => {
+    const site = await db.insert(schema.sites).values({
+      name: 'Expired OAuth',
+      url: 'https://expired-oauth.example.com',
+      platform: 'new-api',
+      status: 'active',
+    }).returning().get();
+    const account = await db.insert(schema.accounts).values({
+      siteId: site.id,
+      username: 'expired-user@example.com',
+      accessToken: 'expired-access-token',
+      status: 'expired',
+      oauthProvider: 'codex',
+      oauthAccountKey: 'expired-account',
+      extraConfig: JSON.stringify({
+        oauth: {
+          provider: 'codex',
+          accountId: 'expired-account',
+          email: 'expired-user@example.com',
+          modelDiscoveryStatus: 'healthy',
+        },
+      }),
+    }).returning().get();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/oauth/connections',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      items: [expect.objectContaining({
+        accountId: account.id,
+        status: 'expired',
+      })],
+    });
   });
 
   it('keeps multiple codex team workspaces with the same email as separate oauth connections', async () => {

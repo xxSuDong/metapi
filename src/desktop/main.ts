@@ -209,6 +209,7 @@ async function startManagedBackend() {
     userDataDir: getUserDataDir(),
     logsDir: getLogsDir(),
     port,
+    appVersion: app.getVersion(),
   });
 
   const child = spawn(process.execPath, [serverEntryPath], {

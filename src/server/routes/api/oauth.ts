@@ -4,6 +4,7 @@ import { createRateLimitGuard } from '../../middleware/requestRateLimit.js';
 import {
   getOauthProviderDefaults,
   deleteOauthConnection,
+  deleteOauthConnectionsBatch,
   importOauthConnectionsFromNativeJson,
   getOauthSessionStatus,
   handleOauthCallback,
@@ -24,6 +25,7 @@ import {
 } from '../../services/oauth/routeUnitService.js';
 import { parseSiteProxyUrlInput } from '../../services/siteProxy.js';
 import {
+  parseOauthConnectionBatchDeletePayload,
   parseOauthConnectionRebindPayload,
   parseOauthConnectionProxyUpdatePayload,
   parseOauthImportPayload,
@@ -85,6 +87,7 @@ let oauthRouteUnitCreateLimiter = createOauthSensitiveRouteLimiter('oauth-connec
 let oauthRouteUnitUpdateLimiter = createOauthSensitiveRouteLimiter('oauth-connection-sensitive-route-unit-update');
 let oauthRouteUnitDeleteLimiter = createOauthSensitiveRouteLimiter('oauth-connection-sensitive-route-unit-delete');
 const MAX_OAUTH_QUOTA_BATCH_SIZE = 100;
+const MAX_OAUTH_DELETE_BATCH_SIZE = 500;
 
 export function resetOauthSensitiveRouteLimiterForTests(options: {
   points?: number;
@@ -372,6 +375,27 @@ export async function oauthRoutes(app: FastifyInstance) {
       } catch (error: any) {
         return reply.code(404).send({ message: error?.message || 'oauth account not found' });
       }
+    },
+  );
+
+  app.post<{ Body: unknown }>(
+    '/api/oauth/connections/delete-batch',
+    { preHandler: [limitOauthConnectionMutate] },
+    async (request, reply) => {
+      const parsedBody = parseOauthConnectionBatchDeletePayload(request.body);
+      if (!parsedBody.success) {
+        return reply.code(400).send({ message: parsedBody.error });
+      }
+      const accountIds = Array.isArray(parsedBody.data.accountIds) ? parsedBody.data.accountIds : [];
+      if (accountIds.length === 0) {
+        return reply.code(400).send({ message: 'accountIds is required' });
+      }
+      if (accountIds.length > MAX_OAUTH_DELETE_BATCH_SIZE) {
+        return reply.code(400).send({
+          message: `accountIds must contain at most ${MAX_OAUTH_DELETE_BATCH_SIZE} items`,
+        });
+      }
+      return deleteOauthConnectionsBatch(accountIds);
     },
   );
 

@@ -690,7 +690,7 @@ export type OAuthConnectionInfo = {
   projectId?: string | null;
   modelCount: number;
   modelsPreview: string[];
-  status: "healthy" | "abnormal";
+  status: "healthy" | "abnormal" | "expired";
   quota?: OAuthQuotaInfo | null;
   routeChannelCount?: number;
   lastModelSyncAt?: string | null;
@@ -717,6 +717,17 @@ export type OAuthQuotaBatchRefreshResponse = {
     accountId: number;
     success: boolean;
     quota?: OAuthQuotaInfo;
+    error?: string;
+  }>;
+};
+
+export type OAuthConnectionBatchDeleteResponse = {
+  success: boolean;
+  deleted: number;
+  failed: number;
+  items: Array<{
+    accountId: number;
+    success: boolean;
     error?: string;
   }>;
 };
@@ -1186,6 +1197,11 @@ export const api = {
     request(`/api/oauth/connections/${accountId}`, {
       method: "DELETE",
     }) as Promise<{ success: true }>,
+  deleteOAuthConnectionsBatch: (accountIds: number[]) =>
+    request("/api/oauth/connections/delete-batch", {
+      method: "POST",
+      body: JSON.stringify({ accountIds }),
+    }) as Promise<OAuthConnectionBatchDeleteResponse>,
   importOAuthConnections: (data: Record<string, unknown>) =>
     request("/api/oauth/import", {
       method: "POST",

@@ -403,12 +403,6 @@ describe('sanitizeResponsesBodyForProxy', () => {
             arguments: '{}',
             status: 'invalid',
           },
-          {
-            type: 'reasoning',
-            id: 'rs_1',
-            status: 'broken',
-            summary: [],
-          },
         ],
       },
       'gpt-5',
@@ -432,10 +426,79 @@ describe('sanitizeResponsesBodyForProxy', () => {
         name: 'lookup_weather',
         arguments: '{}',
       },
+    ]);
+  });
+
+  it('drops output-only reasoning history before proxying native Responses requests', () => {
+    const result = sanitizeResponsesBodyForProxy(
       {
-        type: 'reasoning',
-        id: 'rs_1',
-        summary: [],
+        model: 'gpt-5',
+        input: [
+          {
+            type: 'message',
+            role: 'user',
+            content: 'hello',
+          },
+          {
+            type: 'reasoning',
+            id: 'rs_1',
+            status: 'completed',
+            encrypted_content: 'encrypted-reasoning-state',
+            summary: [{ type: 'summary_text', text: 'thinking summary' }],
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [],
+          },
+          {
+            type: 'function_call',
+            call_id: 'call_1',
+            name: 'lookup_weather',
+            arguments: '{}',
+          },
+          {
+            type: 'function_call_output',
+            call_id: 'call_1',
+            output: '{"temp":22}',
+          },
+          {
+            type: 'message',
+            role: 'user',
+            content: 'continue',
+          },
+        ],
+      },
+      'gpt-5',
+      false,
+    );
+
+    expect(result.input).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'hello' }],
+      },
+      {
+        type: 'message',
+        role: 'assistant',
+        content: [],
+      },
+      {
+        type: 'function_call',
+        call_id: 'call_1',
+        name: 'lookup_weather',
+        arguments: '{}',
+      },
+      {
+        type: 'function_call_output',
+        call_id: 'call_1',
+        output: '{"temp":22}',
+      },
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'continue' }],
       },
     ]);
   });

@@ -3,6 +3,7 @@ type DesktopServerEnvInput = {
   userDataDir: string;
   logsDir: string;
   port: number;
+  appVersion?: string;
 };
 
 type WaitForServerReadyInput = {
@@ -40,6 +41,7 @@ export function buildDesktopServerEnv(input: DesktopServerEnvInput): NodeJS.Proc
     PORT: String(input.port),
     DATA_DIR: input.userDataDir,
     METAPI_DESKTOP: '1',
+    METAPI_APP_VERSION: input.appVersion || input.inheritedEnv?.METAPI_APP_VERSION || '',
     METAPI_LOG_DIR: input.logsDir,
   };
 }

@@ -11,7 +11,7 @@ const SELF_LOG_PAGE_SIZE = 20;
 const MATCH_LOOKBACK_MS = 25_000;
 const MATCH_LOOKAHEAD_MS = 120_000;
 const MATCH_MAX_CREATED_DELTA_MS = 90_000;
-const MATCH_MAX_LATENCY_DELTA_MS = 12_000;
+const SUB2API_MATCH_MAX_LATENCY_DELTA_MS = 120_000;
 const QUOTA_PER_UNIT = 500_000;
 const SUPPORTED_USAGE_FALLBACK_PLATFORMS = new Set(['done-hub', 'one-hub', 'new-api', 'anyrouter', 'sub2api']);
 const ALWAYS_LOOKUP_SELF_LOG_PLATFORMS = new Set(['done-hub', 'one-hub', 'anyrouter', 'sub2api']);
@@ -87,6 +87,7 @@ interface SelfLogMatchInput {
   requestStartedAtMs: number;
   requestEndedAtMs: number;
   localLatencyMs: number;
+  maxLatencyDeltaMs?: number;
 }
 
 function toNumber(value: unknown, fallback = 0): number {
@@ -520,7 +521,8 @@ export function findBestSelfLogMatch(items: SelfLogItem[], input: SelfLogMatchIn
 
   if (input.localLatencyMs > 0 && best.requestTimeMs > 0) {
     const latencyDelta = Math.abs(best.requestTimeMs - input.localLatencyMs);
-    if (latencyDelta > MATCH_MAX_LATENCY_DELTA_MS) return null;
+    const maxLatencyDeltaMs = input.maxLatencyDeltaMs ?? SUB2API_MATCH_MAX_LATENCY_DELTA_MS;
+    if (latencyDelta > maxLatencyDeltaMs) return null;
   }
 
   return best;

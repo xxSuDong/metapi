@@ -304,9 +304,16 @@ export async function fetchDockerHubTagCandidates(): Promise<DockerHubTagCandida
   return selectDockerHubTagCandidates(Array.isArray(payload?.results) ? payload.results : []);
 }
 
-export function getCurrentRuntimeVersion(): string {
+export function getCurrentRuntimeVersion(options: {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+} = {}): string {
+  const env = options.env ?? process.env;
+  const injectedVersion = String(env.METAPI_APP_VERSION || '').trim();
+  if (injectedVersion) return injectedVersion;
+
   try {
-    const packageJsonPath = resolve(process.cwd(), 'package.json');
+    const packageJsonPath = resolve(options.cwd ?? process.cwd(), 'package.json');
     const payload = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { version?: string };
     const version = String(payload?.version || '').trim();
     return version || '0.0.0';

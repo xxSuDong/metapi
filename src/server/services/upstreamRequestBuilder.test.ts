@@ -1,11 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
+import { config } from '../config.js';
 import {
   buildClaudeCountTokensUpstreamRequest,
   buildUpstreamEndpointRequest,
 } from './upstreamRequestBuilder.js';
+import { createEmptyPayloadRulesConfig } from './payloadRules.js';
 
 describe('upstreamRequestBuilder', () => {
+  afterEach(() => {
+    (config as any).payloadRules = createEmptyPayloadRulesConfig();
+  });
+
   it('normalizes single-message OpenAI requests to structured responses input', () => {
     const request = buildUpstreamEndpointRequest({
       endpoint: 'responses',
@@ -82,6 +88,43 @@ describe('upstreamRequestBuilder', () => {
     });
 
     expect(request.headers.accept).toBe('text/event-stream');
+  });
+
+  it('adds MiniMax reasoning_split by default for OpenAI-compatible chat requests', () => {
+    const request = buildUpstreamEndpointRequest({
+      endpoint: 'chat',
+      modelName: 'MiniMax-M2.7',
+      stream: false,
+      tokenValue: 'sk-test',
+      sitePlatform: 'openai',
+      siteUrl: 'https://api.minimaxi.com/v1',
+      openaiBody: {
+        model: 'MiniMax-M2.7',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      downstreamFormat: 'openai',
+    });
+
+    expect(request.body.reasoning_split).toBe(true);
+  });
+
+  it('does not override an explicit MiniMax reasoning_split value', () => {
+    const request = buildUpstreamEndpointRequest({
+      endpoint: 'chat',
+      modelName: 'MiniMax-M2.7',
+      stream: false,
+      tokenValue: 'sk-test',
+      sitePlatform: 'openai',
+      siteUrl: 'https://api.minimaxi.com/v1',
+      openaiBody: {
+        model: 'MiniMax-M2.7',
+        messages: [{ role: 'user', content: 'hello' }],
+        reasoning_split: false,
+      },
+      downstreamFormat: 'openai',
+    });
+
+    expect(request.body.reasoning_split).toBe(false);
   });
 
   it('applies a sub2api-style allowlist to generic passthrough headers', () => {

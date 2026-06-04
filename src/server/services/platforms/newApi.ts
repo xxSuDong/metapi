@@ -50,18 +50,20 @@ export class NewApiAdapter extends BasePlatformAdapter {
     return null;
   }
 
-  private authHeaders(accessToken: string, userId?: number): Record<string, string> {
-    const headers: Record<string, string> = { Authorization: `Bearer ${accessToken}` };
-    if (userId) {
-      const value = String(userId);
-      headers['New-API-User'] = value;
-      headers['Veloera-User'] = value;
-      headers['voapi-user'] = value;
-      headers['User-id'] = value;
-      headers['Rix-Api-User'] = value;
-      headers['neo-api-user'] = value;
-    }
+  private appendUserIdCompatibilityHeaders(headers: Record<string, string>, userId?: number | null): Record<string, string> {
+    if (!userId) return headers;
+    const value = String(userId);
+    headers['New-API-User'] = value;
+    headers['Veloera-User'] = value;
+    headers['voapi-user'] = value;
+    headers['User-id'] = value;
+    headers['Rix-Api-User'] = value;
+    headers['neo-api-user'] = value;
     return headers;
+  }
+
+  private authHeaders(accessToken: string, userId?: number): Record<string, string> {
+    return this.appendUserIdCompatibilityHeaders({ Authorization: `Bearer ${accessToken}` }, userId);
   }
 
   private buildCookieCandidates(token: string): string[] {
@@ -1101,13 +1103,14 @@ export class NewApiAdapter extends BasePlatformAdapter {
     const tryCookieCheckin = async (cookieUserId?: number | null): Promise<CheckinResult | null> => {
       for (const cookie of this.buildCookieCandidates(accessToken)) {
         try {
+          const signInHeaders = this.appendUserIdCompatibilityHeaders({
+            Cookie: cookie,
+            'X-Requested-With': 'XMLHttpRequest',
+          }, cookieUserId);
           const signInRes = await this.fetchJsonRaw<any>(`${baseUrl}/api/user/sign_in`, {
             method: 'POST',
             body: '{}',
-            headers: {
-              Cookie: cookie,
-              'X-Requested-With': 'XMLHttpRequest',
-            },
+            headers: signInHeaders,
           });
           if (signInRes?.success) {
             return {
@@ -1124,8 +1127,7 @@ export class NewApiAdapter extends BasePlatformAdapter {
         }
 
         try {
-          const headers: Record<string, string> = { Cookie: cookie };
-          if (cookieUserId) headers['New-Api-User'] = String(cookieUserId);
+          const headers = this.appendUserIdCompatibilityHeaders({ Cookie: cookie }, cookieUserId);
           const res = await this.fetchJsonRaw<any>(`${baseUrl}/api/user/checkin`, {
             method: 'POST',
             headers,

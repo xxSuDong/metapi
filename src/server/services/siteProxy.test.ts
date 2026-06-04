@@ -218,6 +218,26 @@ describe('siteProxy', () => {
     expect('dispatcher' in requestInit).toBe(true);
   });
 
+  it('lets site custom user-agent override client user-agent while keeping request auth authoritative', async () => {
+    const { withSiteRecordProxyRequestInit } = await import('./siteProxy.js');
+    const requestInit = withSiteRecordProxyRequestInit({
+      customHeaders: JSON.stringify({
+        'User-Agent': 'site-managed-ua/1.0',
+        authorization: 'Bearer site-default',
+      }),
+    }, {
+      method: 'POST',
+      headers: {
+        'User-Agent': 'OpenAI/Python 2.32.0',
+        Authorization: 'Bearer request-token',
+      },
+    });
+    const headers = new Headers(requestInit.headers);
+
+    expect(headers.get('user-agent')).toBe('site-managed-ua/1.0');
+    expect(headers.get('authorization')).toBe('Bearer request-token');
+  });
+
   it('merges parsed-object site custom headers from site records', async () => {
     const { withSiteRecordProxyRequestInit } = await import('./siteProxy.js');
     const requestInit = withSiteRecordProxyRequestInit({
