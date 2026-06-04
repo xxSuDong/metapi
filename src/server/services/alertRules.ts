@@ -25,6 +25,7 @@ export function isTokenExpiredError(input: { status?: number; message?: string |
   const text = (input.message || '').toLowerCase();
   if (isEndpointDispatchDeniedMessage(rawMessage)) return false;
   if (input.status === 401 || containsHttpStatus(rawMessage, 401)) return true;
+  if (typeof input.status === 'number' && input.status >= 500) return false;
   if (!text) return false;
 
   // NewAPI-like sites may return this when session context is missing for an action,

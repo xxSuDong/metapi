@@ -31,6 +31,17 @@ describe('failureReasonService', () => {
     expect(result.category).toBe('auth');
   });
 
+  it('keeps upstream 5xx token-expired messages classified as site errors', () => {
+    const result = classifyFailureReason({
+      message: 'Service unavailable: token expired while upstream validates provider state',
+      status: 'failed',
+      httpStatus: 503,
+    });
+
+    expect(result.code).toBe('upstream_error');
+    expect(result.category).toBe('site');
+  });
+
   it('classifies already checked in as state info', () => {
     const result = classifyFailureReason({
       message: '今天已经签到过啦',

@@ -20,6 +20,21 @@ describe('alertRules', () => {
     expect(isTokenExpiredError({ status: 500, message: 'upstream error' })).toBe(false);
   });
 
+  it('does not treat retryable upstream server errors as token expiration', () => {
+    expect(isTokenExpiredError({
+      status: 503,
+      message: 'Service unavailable: token validation temporarily unavailable',
+    })).toBe(false);
+    expect(isTokenExpiredError({
+      status: 502,
+      message: 'Bad gateway: invalid token response from upstream service',
+    })).toBe(false);
+    expect(isTokenExpiredError({
+      status: 500,
+      message: 'Internal server error: token expired while checking provider state',
+    })).toBe(false);
+  });
+
   it('does not treat endpoint dispatch denial as token expiration', () => {
     expect(isTokenExpiredError({
       status: 403,
