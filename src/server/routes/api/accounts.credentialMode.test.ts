@@ -129,6 +129,36 @@ describe('accounts credential mode', { timeout: 15_000 }, () => {
     expect(parsedExtra.credentialMode).toBe('apikey');
   });
 
+  it('stores account proxy settings when adding a connection', async () => {
+    getModelsMock.mockResolvedValueOnce(['gpt-4o-mini']);
+
+    const site = await db.insert(schema.sites).values({
+      name: 'Proxy Config Site',
+      url: 'https://proxy-config.example.com',
+      platform: 'new-api',
+    }).returning().get();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/accounts',
+      payload: {
+        siteId: site.id,
+        accessToken: 'sk-proxy-config',
+        credentialMode: 'apikey',
+        proxyUrl: 'http://127.0.0.1:7890',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const accounts = await db.select().from(schema.accounts).all();
+    expect(accounts).toHaveLength(1);
+    expect(JSON.parse(accounts[0]?.extraConfig || '{}')).toMatchObject({
+      credentialMode: 'apikey',
+      proxyUrl: 'http://127.0.0.1:7890',
+    });
+  });
+
   it('rejects malformed verify-token payloads at the route boundary', async () => {
     const response = await app.inject({
       method: 'POST',

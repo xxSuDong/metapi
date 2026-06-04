@@ -679,6 +679,10 @@ export async function accountsRoutes(app: FastifyInstance) {
       const credentialMode = resolveRequestedCredentialMode(
         parsedBody.data.credentialMode,
       );
+      const parsedProxyUrl = parseSiteProxyUrlInput(parsedBody.data.proxyUrl);
+      if (parsedProxyUrl.present && !parsedProxyUrl.valid) {
+        return reply.code(400).send({ success: false, message: "Invalid proxy URL format" });
+      }
       const site = await db
         .select()
         .from(schema.sites)
@@ -788,10 +792,14 @@ export async function accountsRoutes(app: FastifyInstance) {
               try {
                 const testRes = await fetch(
                   `${baseUrl.replace(/\/+$/, "")}/api/user/self`,
-                  withSiteRecordProxyRequestInit(site, {
-                    headers,
-                    signal: AbortSignal.timeout(ACCOUNT_VERIFY_DIAG_TIMEOUT_MS),
-                  }),
+                  withSiteRecordProxyRequestInit(
+                    site,
+                    {
+                      headers,
+                      signal: AbortSignal.timeout(ACCOUNT_VERIFY_DIAG_TIMEOUT_MS),
+                    },
+                    parsedProxyUrl.proxyUrl,
+                  ),
                 );
                 sawResponse = true;
                 const bodyText = await testRes.text();
@@ -865,11 +873,14 @@ export async function accountsRoutes(app: FastifyInstance) {
 
       if (credentialMode === "apikey") {
         try {
-          const models = await getModelsWithSiteApiEndpointPool(
-            site,
-            adapter,
-            accessToken,
-            parsedPlatformUserId,
+          const models = await withAccountProxyOverride(
+            parsedProxyUrl.proxyUrl,
+            () => getModelsWithSiteApiEndpointPool(
+              site,
+              adapter,
+              accessToken,
+              parsedPlatformUserId,
+            ),
           );
           const availableModels = Array.isArray(models)
             ? models.filter(
@@ -906,11 +917,14 @@ export async function accountsRoutes(app: FastifyInstance) {
 
       let result: any;
       try {
-        result = await withTimeout(
-          () =>
-            adapter.verifyToken(site.url, accessToken, parsedPlatformUserId),
-          ACCOUNT_VERIFY_TIMEOUT_MS,
-          `Token verification timed out (${Math.max(1, Math.round(ACCOUNT_VERIFY_TIMEOUT_MS / 1000))}s)`,
+        result = await withAccountProxyOverride(
+          parsedProxyUrl.proxyUrl,
+          () => withTimeout(
+            () =>
+              adapter.verifyToken(site.url, accessToken, parsedPlatformUserId),
+            ACCOUNT_VERIFY_TIMEOUT_MS,
+            `Token verification timed out (${Math.max(1, Math.round(ACCOUNT_VERIFY_TIMEOUT_MS / 1000))}s)`,
+          ),
         );
       } catch (err: any) {
         if (isVerificationTimeoutError(err)) {
@@ -1028,10 +1042,14 @@ export async function accountsRoutes(app: FastifyInstance) {
               try {
                 const testRes = await fetch(
                   `${site.url}/api/user/self`,
-                  withSiteRecordProxyRequestInit(site, {
-                    headers,
-                    signal: AbortSignal.timeout(ACCOUNT_VERIFY_DIAG_TIMEOUT_MS),
-                  }),
+                  withSiteRecordProxyRequestInit(
+                    site,
+                    {
+                      headers,
+                      signal: AbortSignal.timeout(ACCOUNT_VERIFY_DIAG_TIMEOUT_MS),
+                    },
+                    parsedProxyUrl.proxyUrl,
+                  ),
                 );
                 const bodyText = await testRes.text();
                 const contentType = testRes.headers.get("content-type") || "";

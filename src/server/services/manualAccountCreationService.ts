@@ -8,6 +8,7 @@ import {
   mergeAccountExtraConfig,
   type AccountCredentialMode,
 } from './accountExtraConfig.js';
+import { parseSiteProxyUrlInput, withAccountProxyOverride } from './siteProxy.js';
 import { runWithSiteApiEndpointPool } from './siteApiEndpointService.js';
 import { type AccountCreatePayload } from '../contracts/accountsRoutePayloads.js';
 import { convergeAccountMutation } from './accountMutationWorkflow.js';
@@ -167,17 +168,27 @@ export async function createManualAccount({
   let tokenType: 'session' | 'apikey' | 'unknown' = 'unknown';
   let verifiedModels: string[] = [];
 
+  const resolvedPlatformUserId =
+    body.platformUserId || guessPlatformUserIdFromUsername(username) || undefined;
+  const parsedProxyUrl = parseSiteProxyUrlInput(body.proxyUrl);
+  if (parsedProxyUrl.present && !parsedProxyUrl.valid) {
+    throw new Error('Invalid proxy URL format');
+  }
+
   if (credentialMode === 'apikey') {
     if (body.skipModelFetch === true) {
       tokenType = 'apikey';
       accessToken = '';
       if (!apiToken) apiToken = rawAccessToken;
     } else {
-      const models = await getModelsWithSiteApiEndpointPool(
-        site,
-        adapter,
-        rawAccessToken,
-        body.platformUserId,
+      const models = await withAccountProxyOverride(
+        parsedProxyUrl.proxyUrl,
+        () => getModelsWithSiteApiEndpointPool(
+          site,
+          adapter,
+          rawAccessToken,
+          body.platformUserId,
+        ),
       );
       verifiedModels = Array.isArray(models)
         ? models.filter((item) => typeof item === 'string' && item.trim().length > 0)
@@ -193,10 +204,13 @@ export async function createManualAccount({
       if (!apiToken) apiToken = rawAccessToken;
     }
   } else {
-    const verifyResult = await withTimeout(
-      () => adapter.verifyToken(site.url, rawAccessToken, body.platformUserId),
-      ACCOUNT_VERIFY_TIMEOUT_MS,
-      buildAccountVerifyTimeoutMessage(),
+    const verifyResult = await withAccountProxyOverride(
+      parsedProxyUrl.proxyUrl,
+      () => withTimeout(
+        () => adapter.verifyToken(site.url, rawAccessToken, body.platformUserId),
+        ACCOUNT_VERIFY_TIMEOUT_MS,
+        buildAccountVerifyTimeoutMessage(),
+      ),
     );
     tokenType = verifyResult.tokenType;
     if (tokenType === 'unknown') {
@@ -221,10 +235,11 @@ export async function createManualAccount({
     }
   }
 
-  const resolvedPlatformUserId =
-    body.platformUserId || guessPlatformUserIdFromUsername(username) || undefined;
   const resolvedCredentialMode: AccountCredentialMode = tokenType === 'apikey' ? 'apikey' : 'session';
   const extraConfigPatch: Record<string, unknown> = { credentialMode: resolvedCredentialMode };
+  if (parsedProxyUrl.proxyUrl) {
+    extraConfigPatch.proxyUrl = parsedProxyUrl.proxyUrl;
+  }
   if (resolvedPlatformUserId) {
     extraConfigPatch.platformUserId = resolvedPlatformUserId;
   }

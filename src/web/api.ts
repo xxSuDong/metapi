@@ -822,6 +822,7 @@ export const api = {
     accessToken: string;
     platformUserId?: number;
     credentialMode?: "auto" | "session" | "apikey";
+    proxyUrl?: string | null;
   }) =>
     request("/api/accounts/verify-token", {
       method: "POST",
