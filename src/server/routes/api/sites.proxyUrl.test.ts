@@ -70,6 +70,20 @@ describe('sites proxy settings', () => {
     expect(payload.globalWeight).toBe(1.5);
   });
 
+  it('returns a client error when platform cannot be detected during site creation', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sites',
+      payload: {
+        name: 'unknown-site',
+        url: 'https://unrecognized-platform.example.com/v1',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect((response.json() as { error?: string }).error).toBe('Could not detect platform. Please specify manually.');
+  });
+
   it('returns a conflict response when the same platform and url already exist', async () => {
     const first = await app.inject({
       method: 'POST',

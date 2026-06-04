@@ -324,6 +324,126 @@ describe('account tokens sync routes with site status', () => {
     expect((tokenRows[0] as any).valueStatus).toBe('ready');
   });
 
+  it('keeps a locally managed token label and enabled state when sync falls back to the same token value', async () => {
+    const { account } = await seedAccount({ siteStatus: 'active' });
+    const sharedToken = 'sk-shared-token-1234';
+
+    await db.insert(schema.accountTokens).values({
+      accountId: account.id,
+      name: 'custom-label',
+      token: sharedToken,
+      source: 'manual',
+      enabled: false,
+      isDefault: false,
+      tokenGroup: 'custom',
+      valueStatus: 'ready' as any,
+    }).run();
+
+    await db.insert(schema.accountTokens).values({
+      accountId: account.id,
+      name: 'primary',
+      token: 'sk-primary-token',
+      source: 'manual',
+      enabled: true,
+      isDefault: true,
+      tokenGroup: 'default',
+      valueStatus: 'ready' as any,
+    }).run();
+
+    getApiTokensMock.mockResolvedValue([]);
+    getApiTokenMock.mockResolvedValue(sharedToken);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/account-tokens/sync/${account.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      success: true,
+      synced: true,
+      status: 'synced',
+      total: 2,
+    });
+
+    const tokenRows = await db.select()
+      .from(schema.accountTokens)
+      .where(eq(schema.accountTokens.accountId, account.id))
+      .all();
+
+    const target = tokenRows.find((row) => row.token === sharedToken);
+    expect(target).toMatchObject({
+      name: 'custom-label',
+      enabled: false,
+      isDefault: false,
+      tokenGroup: 'custom',
+    });
+  });
+
+  it('keeps a locally managed token label and default choice when restoring a legacy api token', async () => {
+    const { account } = await seedAccount({ siteStatus: 'active', accessToken: '' });
+    const sharedToken = 'sk-legacy-shared-token';
+
+    await db.update(schema.accounts)
+      .set({
+        apiToken: sharedToken,
+        extraConfig: mergeAccountExtraConfig(null, { credentialMode: 'session' }),
+      })
+      .where(eq(schema.accounts.id, account.id))
+      .run();
+
+    await db.insert(schema.accountTokens).values({
+      accountId: account.id,
+      name: 'legacy-custom-label',
+      token: sharedToken,
+      source: 'manual',
+      enabled: true,
+      isDefault: false,
+      tokenGroup: 'custom',
+      valueStatus: 'ready' as any,
+    }).run();
+
+    await db.insert(schema.accountTokens).values({
+      accountId: account.id,
+      name: 'primary',
+      token: 'sk-primary-token',
+      source: 'manual',
+      enabled: true,
+      isDefault: true,
+      tokenGroup: 'default',
+      valueStatus: 'ready' as any,
+    }).run();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/account-tokens/sync/${account.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      success: true,
+      synced: true,
+      status: 'synced',
+      reason: 'legacy_default_token_restored',
+    });
+
+    const tokenRows = await db.select()
+      .from(schema.accountTokens)
+      .where(eq(schema.accountTokens.accountId, account.id))
+      .all();
+
+    const target = tokenRows.find((row) => row.token === sharedToken);
+    expect(target).toMatchObject({
+      name: 'legacy-custom-label',
+      enabled: true,
+      isDefault: false,
+      tokenGroup: 'custom',
+    });
+    expect(tokenRows.find((row) => row.token === 'sk-primary-token')).toMatchObject({
+      isDefault: true,
+    });
+  });
+
   it('does not reuse a different ready token when another logical token shares the same masked value', async () => {
     const { account } = await seedAccount({ siteStatus: 'active' });
     const firstFullToken = 'sk-real-token-1234';

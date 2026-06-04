@@ -29,6 +29,7 @@ export async function convergeAccountMutation(input: {
   preferredApiToken?: string | null;
   defaultTokenSource?: string;
   ensurePreferredTokenBeforeSync?: boolean;
+  preservePreferredTokenMetadata?: boolean;
   upstreamTokens?: UpstreamTokenLike[];
   refreshBalance?: boolean;
   refreshModels?: boolean;
@@ -65,11 +66,17 @@ export async function convergeAccountMutation(input: {
     }
   };
 
+  const preferredTokenOptions = {
+    name: 'default',
+    source: input.defaultTokenSource || 'manual',
+    ...(input.preservePreferredTokenMetadata ? { preserveExistingMetadata: true } : {}),
+  };
+
   if (input.ensurePreferredTokenBeforeSync && input.preferredApiToken?.trim()) {
     const defaultTokenId = await runStep(() => ensureDefaultTokenForAccount(
       input.accountId,
       input.preferredApiToken!,
-      { name: 'default', source: input.defaultTokenSource || 'manual' },
+      preferredTokenOptions,
     ));
     if (defaultTokenId != null) {
       result.defaultTokenId = defaultTokenId;
@@ -86,7 +93,7 @@ export async function convergeAccountMutation(input: {
       const defaultTokenId = await runStep(() => ensureDefaultTokenForAccount(
         input.accountId,
         input.preferredApiToken!,
-        { name: 'default', source: input.defaultTokenSource || 'manual' },
+        preferredTokenOptions,
       ));
       if (defaultTokenId != null) {
         result.defaultTokenId = defaultTokenId;
@@ -96,7 +103,7 @@ export async function convergeAccountMutation(input: {
     const defaultTokenId = await runStep(() => ensureDefaultTokenForAccount(
       input.accountId,
       input.preferredApiToken!,
-      { name: 'default', source: input.defaultTokenSource || 'manual' },
+      preferredTokenOptions,
     ));
     if (defaultTokenId != null) {
       result.defaultTokenId = defaultTokenId;
