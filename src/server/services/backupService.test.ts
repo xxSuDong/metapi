@@ -1556,6 +1556,7 @@ describe('backupService', () => {
     expect(init.headers).toMatchObject({
       Authorization: `Basic ${Buffer.from('alice:secret-pass').toString('base64')}`,
       'Content-Type': 'application/json',
+      Overwrite: 'T',
     });
     const payload = JSON.parse(String(init.body));
     expect(payload.type).toBe('preferences');
@@ -1568,6 +1569,40 @@ describe('backupService', () => {
     const syncState = await db.select().from(schema.settings).where(eq(schema.settings.key, 'backup_webdav_state_v1')).get();
     expect(syncState?.value).toContain('"lastSyncAt"');
     expect(syncState?.value).toContain('"lastError":null');
+
+    fetchSpy.mockRestore();
+  });
+
+  it('creates the webdav parent collection and retries export after a 409 conflict', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy
+      .mockResolvedValueOnce(new Response('missing parent collection', { status: 409 }))
+      .mockResolvedValueOnce(new Response(null, { status: 201 }))
+      .mockResolvedValueOnce(new Response(null, { status: 201 }));
+
+    await db.insert(schema.settings).values({
+      key: 'backup_webdav_config_v1',
+      value: JSON.stringify({
+        enabled: true,
+        fileUrl: 'https://dav.example.com/backups/metapi-preferences.json',
+        username: 'alice',
+        password: 'secret-pass',
+        exportType: 'preferences',
+        autoSyncEnabled: false,
+        autoSyncCron: '0 * * * *',
+      }),
+    }).run();
+
+    const result = await (backupService as any).exportBackupToWebdav();
+
+    expect(result.success).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://dav.example.com/backups/metapi-preferences.json');
+    expect((fetchSpy.mock.calls[0][1] as RequestInit).method).toBe('PUT');
+    expect(fetchSpy.mock.calls[1][0]).toBe('https://dav.example.com/backups/');
+    expect((fetchSpy.mock.calls[1][1] as RequestInit).method).toBe('MKCOL');
+    expect(fetchSpy.mock.calls[2][0]).toBe('https://dav.example.com/backups/metapi-preferences.json');
+    expect((fetchSpy.mock.calls[2][1] as RequestInit).method).toBe('PUT');
 
     fetchSpy.mockRestore();
   });
