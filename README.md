@@ -20,9 +20,9 @@
   <img alt="AtomGit Stars" src="https://atomgit.com/cita-777/metapi/star/badge.svg">
 </a><a href="https://deepwiki.com/cita-777/metapi">
   <img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg">
-</a><a href="https://hub.docker.com/r/1467078763/metapi">
-  <img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/1467078763/metapi?style=flat&logo=docker&label=Docker%20Pulls">
-</a><a href="https://hub.docker.com/r/1467078763/metapi">
+</a><a href="https://hub.docker.com/r/kennethww/metapi">
+  <img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/kennethww/metapi?style=flat&logo=docker&label=Docker%20Pulls">
+</a><a href="https://hub.docker.com/r/kennethww/metapi">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-brightgreen?style=flat">
 </a><img alt="Node.js" src="https://img.shields.io/badge/Node.js-22.15%2B-339933?logo=node.js&style=flat"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&style=flat"><a href="https://zeabur.com/templates/DOX5PR">
   <img alt="Deploy on Zeabur" src="https://zeabur.com/button.svg" height="28">
@@ -295,7 +295,7 @@ mkdir metapi && cd metapi
 cat > docker-compose.yml << 'EOF'
 services:
   metapi:
-    image: 1467078763/metapi:latest
+    image: kennethww/metapi:latest
     ports:
       - "4000:4000"
     volumes:
@@ -330,7 +330,7 @@ docker run -d --name metapi \
   -e TZ=Asia/Shanghai \
   -v ./data:/app/data \
   --restart unless-stopped \
-  1467078763/metapi:latest
+  kennethww/metapi:latest
 ```
 
 </details>

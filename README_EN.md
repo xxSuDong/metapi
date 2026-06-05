@@ -26,11 +26,11 @@ into <strong>one API Key, one endpoint</strong>, with automatic model discovery,
 --><a href="https://deepwiki.com/cita-777/metapi">
   <img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg">
 </a><!--
---><a href="https://hub.docker.com/r/1467078763/metapi">
-  <img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/1467078763/metapi?style=flat&logo=docker&label=Docker%20Pulls">
+--><a href="https://hub.docker.com/r/kennethww/metapi">
+  <img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/kennethww/metapi?style=flat&logo=docker&label=Docker%20Pulls">
 </a><!--
---><a href="https://hub.docker.com/r/1467078763/metapi">
-  <img alt="Docker Image" src="https://img.shields.io/badge/docker-1467078763%2Fmetapi-blue?logo=docker&style=flat">
+--><a href="https://hub.docker.com/r/kennethww/metapi">
+  <img alt="Docker Image" src="https://img.shields.io/badge/docker-kennethww%2Fmetapi-blue?logo=docker&style=flat">
 </a><!--
 --><a href="LICENSE">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-brightgreen?style=flat">
@@ -311,7 +311,7 @@ mkdir metapi && cd metapi
 cat > docker-compose.yml << 'EOF'
 services:
   metapi:
-    image: 1467078763/metapi:latest
+    image: kennethww/metapi:latest
     ports:
       - "4000:4000"
     volumes:
@@ -346,7 +346,7 @@ docker run -d --name metapi \
   -e TZ=Asia/Shanghai \
   -v ./data:/app/data \
   --restart unless-stopped \
-  1467078763/metapi:latest
+  kennethww/metapi:latest
 ```
 
 </details>

@@ -256,7 +256,7 @@ kubectl apply -f /opt/metapi-k3s/metapi-deploy-helper.yaml
 
 ```bash
 helm template metapi /opt/metapi-k3s/chart \
-  --set image.repository=1467078763/metapi \
+  --set image.repository=kennethww/metapi \
   --set image.tag=latest \
   --set-string image.digest=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
   | grep -n 'image:'
@@ -264,11 +264,11 @@ helm template metapi /opt/metapi-k3s/chart \
 
 你期望看到的是：
 
-- `image: "1467078763/metapi@sha256:..."`
+- `image: "kennethww/metapi@sha256:..."`
 
 如果输出仍然是：
 
-- `image: "1467078763/metapi:latest"`
+- `image: "kennethww/metapi:latest"`
 
 那说明这份 chart 还是 tag 语义，先不要继续配置更新中心。
 
@@ -299,7 +299,7 @@ helper 端使用：
 | `Namespace` | 目标 release 所在命名空间 | `ai` |
 | `Release Name` | Helm release 名 | `metapi` |
 | `Chart Ref` | helper Pod 能访问到的 chart 引用 | `/opt/metapi-k3s/chart` |
-| `Image Repository` | 升级时写入 chart 的镜像仓库 | `1467078763/metapi` |
+| `Image Repository` | 升级时写入 chart 的镜像仓库 | `kennethww/metapi` |
 | `默认部署来源` | 默认从 GitHub 还是 Docker Hub 取版本 | `GitHub Releases` |
 
 另外还有 3 个开关：
