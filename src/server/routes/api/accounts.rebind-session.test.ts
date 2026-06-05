@@ -187,6 +187,61 @@ describe('accounts rebind-session api', { timeout: 15_000 }, () => {
     expect(latest?.status).toBe('active');
   });
 
+  it('preserves an existing default api key label when rebind returns the same api token', async () => {
+    verifyTokenMock.mockResolvedValueOnce({
+      tokenType: 'session',
+      userInfo: { username: 'linuxdo_1004' },
+      apiToken: 'sk-existing-default-token',
+    });
+
+    const site = await db.insert(schema.sites).values({
+      name: 'Rebind Site',
+      url: 'https://rebind.example.com',
+      platform: 'new-api',
+    }).returning().get();
+
+    const account = await db.insert(schema.accounts).values({
+      siteId: site.id,
+      username: 'linuxdo_1001',
+      accessToken: 'old-access-token',
+      apiToken: 'sk-existing-default-token',
+      status: 'expired',
+    }).returning().get();
+
+    await db.insert(schema.accountTokens).values({
+      accountId: account.id,
+      name: 'human-label',
+      token: 'sk-existing-default-token',
+      source: 'manual',
+      enabled: true,
+      isDefault: true,
+      tokenGroup: 'custom',
+      valueStatus: 'ready' as any,
+    }).run();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/accounts/${account.id}/rebind-session`,
+      payload: {
+        accessToken: 'new-session-token',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const tokenRows = await db.select()
+      .from(schema.accountTokens)
+      .where(eq(schema.accountTokens.accountId, account.id))
+      .all();
+    expect(tokenRows).toHaveLength(1);
+    expect(tokenRows[0]).toMatchObject({
+      name: 'human-label',
+      token: 'sk-existing-default-token',
+      isDefault: true,
+      tokenGroup: 'custom',
+    });
+  });
+
   it('stores managed sub2api refresh token fields when provided during rebind', async () => {
     verifyTokenMock.mockResolvedValueOnce({
       tokenType: 'session',

@@ -1256,6 +1256,7 @@ export async function accountsRoutes(app: FastifyInstance) {
         accountId,
         preferredApiToken: nextApiToken,
         defaultTokenSource: "sync",
+        preservePreferredTokenMetadata: true,
         refreshBalance: true,
         refreshModels: true,
         rebuildRoutes: true,

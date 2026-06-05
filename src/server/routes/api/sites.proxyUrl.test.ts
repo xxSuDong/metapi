@@ -489,6 +489,19 @@ describe('sites proxy settings', () => {
     expect((response.json() as { error?: string }).error).toContain('url');
   });
 
+  it('returns a client error when site detection cannot identify the platform', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sites/detect',
+      payload: {
+        url: 'https://unrecognized-platform.example.com/v1',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect((response.json() as { error?: string }).error).toBe('Could not detect platform');
+  });
+
   it('does not force CodingPlan preset metadata when the user explicitly chooses generic openai', async () => {
     const response = await app.inject({
       method: 'POST',
