@@ -294,10 +294,14 @@ function parseUsageRecord(record: Record<string, unknown>): ParsedProxyUsage {
     completionTokens = totalTokens - promptTokens;
   }
 
+  const billableTotalTokens = promptTokens + completionTokens + (
+    promptTokensIncludeCache === false ? cacheReadTokens + cacheCreationTokens : 0
+  );
+
   return {
     promptTokens,
     completionTokens,
-    totalTokens: Math.max(totalTokens, promptTokens + completionTokens),
+    totalTokens: Math.max(totalTokens, billableTotalTokens),
     cacheReadTokens,
     cacheCreationTokens,
     promptTokensIncludeCache,

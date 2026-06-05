@@ -13,6 +13,7 @@ const { apiMock } = vi.hoisted(() => ({
     getAccountTokens: vi.fn(),
     addAccount: vi.fn(),
     addAccountAvailableModels: vi.fn(),
+    verifyToken: vi.fn(),
   },
 }));
 
@@ -49,6 +50,12 @@ describe('Accounts CodingPlan initialization', () => {
       siteId: 10,
       tokenType: 'apikey',
       queued: false,
+    });
+    apiMock.verifyToken.mockResolvedValue({
+      success: true,
+      tokenType: 'apikey',
+      modelCount: 1,
+      models: ['gpt-4o-mini'],
     });
     apiMock.addAccountAvailableModels.mockResolvedValue({ success: true });
   });
@@ -175,6 +182,72 @@ describe('Accounts CodingPlan initialization', () => {
         19,
         ['deepseek-chat', 'deepseek-reasoner'],
       );
+    } finally {
+      root?.unmount();
+    }
+  });
+
+  it('sends proxy settings when adding an API key connection', async () => {
+    let root!: ReactTestRenderer;
+    try {
+      await act(async () => {
+        root = create(
+          <MemoryRouter initialEntries={['/accounts?segment=apikey&create=1&siteId=10']}>
+            <ToastProvider>
+              <Accounts />
+            </ToastProvider>
+          </MemoryRouter>,
+        );
+      });
+      await flushMicrotasks();
+
+      const tokenInput = root.root.find((node) => (
+        node.type === 'textarea'
+        && node.props.placeholder === '粘贴 API Key'
+      ));
+      const proxyInput = root.root.find((node) => (
+        node.type === 'input'
+        && node.props.placeholder === '代理地址（可选，如 http://127.0.0.1:7890）'
+      ));
+      const verifyButton = root.root.find((node) => (
+        node.type === 'button'
+        && typeof node.props.onClick === 'function'
+        && collectText(node).includes('验证 API Key')
+      ));
+      const addButton = root.root.find((node) => (
+        node.type === 'button'
+        && typeof node.props.onClick === 'function'
+        && collectText(node).includes('添加连接')
+      ));
+
+      await act(async () => {
+        tokenInput.props.onChange({ target: { value: 'sk-proxy-demo' } });
+        proxyInput.props.onChange({ target: { value: 'http://127.0.0.1:7890' } });
+      });
+
+      await act(async () => {
+        await verifyButton.props.onClick();
+      });
+      await flushMicrotasks();
+
+      expect(apiMock.verifyToken).toHaveBeenCalledWith(expect.objectContaining({
+        siteId: 10,
+        accessToken: 'sk-proxy-demo',
+        credentialMode: 'apikey',
+        proxyUrl: 'http://127.0.0.1:7890',
+      }));
+
+      await act(async () => {
+        await addButton.props.onClick();
+      });
+      await flushMicrotasks();
+
+      expect(apiMock.addAccount).toHaveBeenCalledWith(expect.objectContaining({
+        siteId: 10,
+        accessToken: 'sk-proxy-demo',
+        credentialMode: 'apikey',
+        proxyUrl: 'http://127.0.0.1:7890',
+      }));
     } finally {
       root?.unmount();
     }

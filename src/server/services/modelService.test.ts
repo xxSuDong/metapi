@@ -252,6 +252,85 @@ describe('rebuildTokenRoutesFromAvailability', () => {
     expect(channels[0]?.manualOverride).toBe(false);
   });
 
+  it('adds new availability-backed channels to an existing wildcard route on rebuild', async () => {
+    const site = await db.insert(schema.sites).values({
+      name: 'wildcard-site',
+      url: 'https://wildcard-site.example.com',
+      platform: 'new-api',
+    }).returning().get();
+
+    const firstAccount = await db.insert(schema.accounts).values({
+      siteId: site.id,
+      username: 'wildcard-user-1',
+      accessToken: 'access-1',
+      status: 'active',
+    }).returning().get();
+
+    const firstToken = await db.insert(schema.accountTokens).values({
+      accountId: firstAccount.id,
+      name: 'default-1',
+      token: 'sk-1',
+      source: 'manual',
+      enabled: true,
+      isDefault: true,
+    }).returning().get();
+
+    await db.insert(schema.tokenModelAvailability).values({
+      tokenId: firstToken.id,
+      modelName: 'claude-opus-4-5',
+      available: true,
+    }).run();
+
+    const wildcardRoute = await db.insert(schema.tokenRoutes).values({
+      modelPattern: 'claude-*',
+      enabled: true,
+    }).returning().get();
+
+    await db.insert(schema.routeChannels).values({
+      routeId: wildcardRoute.id,
+      accountId: firstAccount.id,
+      tokenId: firstToken.id,
+      sourceModel: 'claude-opus-4-5',
+      priority: 0,
+      weight: 10,
+      enabled: true,
+      manualOverride: false,
+    }).run();
+
+    const secondAccount = await db.insert(schema.accounts).values({
+      siteId: site.id,
+      username: 'wildcard-user-2',
+      accessToken: 'access-2',
+      status: 'active',
+    }).returning().get();
+
+    const secondToken = await db.insert(schema.accountTokens).values({
+      accountId: secondAccount.id,
+      name: 'default-2',
+      token: 'sk-2',
+      source: 'manual',
+      enabled: true,
+      isDefault: true,
+    }).returning().get();
+
+    await db.insert(schema.tokenModelAvailability).values({
+      tokenId: secondToken.id,
+      modelName: 'claude-opus-4-6',
+      available: true,
+    }).run();
+
+    const rebuild = await rebuildTokenRoutesFromAvailability();
+
+    expect(rebuild.models).toBe(2);
+
+    const wildcardChannels = await db.select().from(schema.routeChannels)
+      .where(eq(schema.routeChannels.routeId, wildcardRoute.id))
+      .all();
+
+    expect(wildcardChannels.some((channel) => channel.accountId === firstAccount.id)).toBe(true);
+    expect(wildcardChannels.some((channel) => channel.accountId === secondAccount.id)).toBe(true);
+  });
+
   it('removes stale exact routes and keeps wildcard routes on rebuild', async () => {
     const site = await db.insert(schema.sites).values({
       name: 'site-1',

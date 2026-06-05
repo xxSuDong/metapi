@@ -456,6 +456,30 @@ async function rebuildAutomaticRouteChannelsByModelPattern(routeId: number, mode
   };
 }
 
+async function populateMatchingPatternRoutesForSourceModel(sourceModel: string, excludeRouteId?: number): Promise<number[]> {
+  const normalizedSourceModel = sourceModel.trim();
+  if (!normalizedSourceModel) return [];
+
+  const routes = await db.select().from(schema.tokenRoutes)
+    .where(eq(schema.tokenRoutes.enabled, true))
+    .all();
+  const matchingPatternRoutes = routes.filter((route) => (
+    route.id !== excludeRouteId
+    && !isExactModelPattern(route.modelPattern)
+    && matchesModelPattern(normalizedSourceModel, route.modelPattern)
+  ));
+
+  const affectedRouteIds: number[] = [];
+  for (const route of matchingPatternRoutes) {
+    const createdChannels = await populateRouteChannelsByModelPattern(route.id, route.modelPattern);
+    if (createdChannels > 0) {
+      affectedRouteIds.push(route.id);
+    }
+  }
+
+  return affectedRouteIds;
+}
+
 type BatchChannelPriorityUpdate = {
   id: number;
   priority: number;
@@ -1354,8 +1378,9 @@ export async function tokensRoutes(app: FastifyInstance) {
     if (!created) {
       return reply.code(500).send({ success: false, message: '创建通道失败' });
     }
-    await clearRouteDecisionSnapshot(routeId);
-    await clearDependentExplicitGroupSnapshotsBySourceRouteIds([routeId]);
+    const affectedPatternRouteIds = await populateMatchingPatternRoutesForSourceModel(sourceModel, routeId);
+    await clearRouteDecisionSnapshots([routeId, ...affectedPatternRouteIds]);
+    await clearDependentExplicitGroupSnapshotsBySourceRouteIds([routeId, ...affectedPatternRouteIds]);
     invalidateTokenRouterCache();
     return created;
   });

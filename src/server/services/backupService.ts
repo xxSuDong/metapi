@@ -1226,6 +1226,34 @@ function validateBackupWebdavConfig(config: BackupWebdavConfig) {
   }
 }
 
+function resolveBackupWebdavParentCollectionUrl(fileUrl: string): string | null {
+  try {
+    const url = new URL(fileUrl);
+    const lastSlashIndex = url.pathname.lastIndexOf('/');
+    if (lastSlashIndex <= 0) return null;
+    url.pathname = url.pathname.slice(0, lastSlashIndex + 1);
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+async function ensureBackupWebdavParentCollection(fileUrl: string, headers: Record<string, string>) {
+  const parentUrl = resolveBackupWebdavParentCollectionUrl(fileUrl);
+  if (!parentUrl) return;
+
+  const response = await fetchBackupWebdav(parentUrl, {
+    method: 'MKCOL',
+    headers,
+  });
+  if (!response.ok && response.status !== 405) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`WebDAV 目录创建失败：HTTP ${response.status}${text ? ` ${text.slice(0, 120)}` : ''}`);
+  }
+}
+
 async function fetchBackupWebdav(url: string, init: RequestInit): Promise<Response> {
   const controller = new AbortController();
   let timeoutHandle: ReturnType<typeof setTimeout> | null = setTimeout(() => {
@@ -1967,16 +1995,26 @@ export async function exportBackupToWebdav(type?: BackupExportType) {
   const payload = await exportBackup(exportType);
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    Overwrite: 'T',
   };
   const authHeader = resolveBackupWebdavAuthHeader(config);
   if (authHeader) headers.Authorization = authHeader;
 
   try {
-    const response = await fetchBackupWebdav(config.fileUrl, {
+    const requestBody = JSON.stringify(payload, null, 2);
+    let response = await fetchBackupWebdav(config.fileUrl, {
       method: 'PUT',
       headers,
-      body: JSON.stringify(payload, null, 2),
+      body: requestBody,
     });
+    if (response.status === 409) {
+      await ensureBackupWebdavParentCollection(config.fileUrl, authHeader ? { Authorization: authHeader } : {});
+      response = await fetchBackupWebdav(config.fileUrl, {
+        method: 'PUT',
+        headers,
+        body: requestBody,
+      });
+    }
     if (!response.ok) {
       const text = await response.text().catch(() => '');
       throw new Error(`WebDAV 导出失败：HTTP ${response.status}${text ? ` ${text.slice(0, 120)}` : ''}`);

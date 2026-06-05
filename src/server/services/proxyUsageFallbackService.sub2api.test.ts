@@ -130,6 +130,72 @@ describe('proxyUsageFallbackService sub2api', () => {
     });
   });
 
+  it('recovers exact cost from sub2api when stream wall-clock latency is much longer than upstream duration', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      code: 0,
+      message: 'success',
+      data: {
+        items: [
+          {
+            id: 4525969,
+            model: 'gpt-5.4',
+            input_tokens: 1213,
+            output_tokens: 466,
+            cache_read_tokens: 213888,
+            total_cost: 0.0634945,
+            actual_cost: 0.001904835,
+            duration_ms: 14764,
+            created_at: '2026-05-24T13:55:23.368Z',
+            api_key: {
+              id: 6604,
+              key: 'sk-route',
+              name: 'upstream-key-name',
+            },
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+        pages: 1,
+      },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const result = await resolveProxyUsageWithSelfLogFallback({
+      site: {
+        url: 'https://sub2api.example.com',
+        platform: 'sub2api',
+      },
+      account: {
+        accessToken: 'jwt-access-token',
+        apiToken: 'sk-account-level',
+      },
+      tokenValue: 'sk-route',
+      tokenName: 'local-token-name',
+      modelName: 'gpt-5.4',
+      requestStartedAtMs: Date.parse('2026-05-24T13:54:23.000Z'),
+      requestEndedAtMs: Date.parse('2026-05-24T13:55:27.000Z'),
+      localLatencyMs: 64000,
+      upstreamUsagePresent: true,
+      usage: {
+        promptTokens: 215101,
+        completionTokens: 466,
+        totalTokens: 215567,
+      },
+    });
+
+    expect(result).toMatchObject({
+      recoveredFromSelfLog: true,
+      estimatedCostFromQuota: 0.001905,
+      usageSource: 'self-log',
+      promptTokens: 1213,
+      completionTokens: 466,
+      totalTokens: 1679,
+    });
+  });
+
   it('treats explicit zero upstream usage as upstream instead of unknown', async () => {
     const result = await resolveProxyUsageWithSelfLogFallback({
       site: {

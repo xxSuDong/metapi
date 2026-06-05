@@ -118,5 +118,11 @@ export function mergeHeadersWithSiteCustomHeaders(
       merged.set(key, value);
     });
   }
+
+  const siteUserAgent = new Headers(normalizedSiteHeaders).get('user-agent');
+  if (siteUserAgent !== null) {
+    merged.set('user-agent', siteUserAgent);
+  }
+
   return merged;
 }

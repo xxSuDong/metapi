@@ -240,6 +240,7 @@ async function executeAccountTokenSync(row: AccountWithSiteRow): Promise<SyncExe
           accountId,
           preferredApiToken: row.accounts.apiToken,
           defaultTokenSource: 'legacy',
+          preservePreferredTokenMetadata: true,
         });
         if (convergence.defaultTokenId != null) {
           return {

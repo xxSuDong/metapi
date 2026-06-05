@@ -14,6 +14,7 @@ const accountCreatePayloadSchema = z.object({
   refreshToken: z.string().optional(),
   tokenExpiresAt: z.union([z.number(), z.string()]).optional(),
   skipModelFetch: z.boolean().optional(),
+  proxyUrl: z.union([z.string(), z.null()]).optional(),
 }).passthrough();
 
 const accountUpdatePayloadSchema = z.object({
@@ -59,6 +60,7 @@ const accountVerifyTokenPayloadSchema = z.object({
   accessToken: z.string().optional(),
   platformUserId: z.number().int().positive().optional(),
   credentialMode: accountCredentialModeSchema.optional(),
+  proxyUrl: z.union([z.string(), z.null()]).optional(),
 }).passthrough();
 
 const accountManualModelsPayloadSchema = z.object({

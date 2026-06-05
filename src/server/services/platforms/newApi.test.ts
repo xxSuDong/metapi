@@ -19,6 +19,7 @@ const CHECKIN_INVALID_URL_TOKEN = 'checkin-invalid-url-token';
 const CHECKIN_INVALID_URL_EXPIRED_SESSION_TOKEN = 'checkin-invalid-url-expired-session-token';
 const CHECKIN_INVALID_URL_FORBIDDEN_SESSION_TOKEN = 'checkin-invalid-url-forbidden-session-token';
 const CHECKIN_CLOUDFLARE_530_TOKEN = 'checkin-cloudflare-530-token';
+const CHECKIN_VELOERA_TOKEN = 'checkin-veloera-token';
 const BALANCE_FAIL_TOKEN = 'balance-fail-token';
 const BALANCE_SHIELD_FAILURE_TOKEN = 'balance-shield-failure-token';
 const GROUP_EXPIRED_TOKEN = 'group-expired-token';
@@ -461,6 +462,11 @@ describe('NewApiAdapter', () => {
           res.end(JSON.stringify({ success: false, message: 'unauthorized' }));
           return;
         }
+        if (typeof req.headers.authorization === 'string' && req.headers.authorization === `Bearer ${CHECKIN_VELOERA_TOKEN}`) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, message: '无权进行此操作，未登录且未提供 access token' }));
+          return;
+        }
         if (typeof req.headers.cookie === 'string' && req.headers.cookie.includes(`session=${COOKIE_SHIELDED_TOKEN}`)) {
           if (!req.headers.cookie.includes(`acw_sc__v2=${ANYROUTER_CHALLENGE_ACW}`)) {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -474,6 +480,16 @@ describe('NewApiAdapter', () => {
           }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true, message: 'checked-in-ok' }));
+          return;
+        }
+        if (typeof req.headers.cookie === 'string' && req.headers.cookie.includes(`session=${CHECKIN_VELOERA_TOKEN}`)) {
+          if (req.headers['veloera-user'] !== '8899') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, message: 'missing Veloera-User' }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: 'veloera checked-in-ok' }));
           return;
         }
       }
@@ -721,6 +737,17 @@ describe('NewApiAdapter', () => {
     expect(result.success).toBe(false);
     expect(result.message).toContain('forbidden');
     expect(result.message).not.toContain('Invalid URL');
+  });
+
+  it('uses all compatibility user-id headers for cookie checkin on New API forks', async () => {
+    const adapter = new NewApiAdapter();
+    const result = await adapter.checkin(baseUrl, CHECKIN_VELOERA_TOKEN, 8899);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('veloera checked-in-ok');
+    expect(
+      requests.some((r) => r.url === '/api/user/checkin' && r.headers['veloera-user'] === '8899'),
+    ).toBe(true);
   });
 
   it('summarizes cloudflare tunnel HTML failures to concise checkin error', async () => {

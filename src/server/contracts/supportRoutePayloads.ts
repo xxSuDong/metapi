@@ -22,6 +22,10 @@ const oauthManualCallbackPayloadSchema = z.object({
   callbackUrl: z.string().optional(),
 }).passthrough();
 
+const oauthConnectionBatchDeletePayloadSchema = z.object({
+  accountIds: z.array(z.number().int().positive()).optional(),
+}).passthrough();
+
 const oauthConnectionRebindPayloadSchema = z.object({
   proxyUrl: z.union([z.string(), z.null()]).optional(),
   useSystemProxy: z.boolean().optional(),
@@ -84,6 +88,7 @@ const updateCenterRollbackPayloadSchema = z.object({
 
 export type AuthChangePayload = z.output<typeof authChangePayloadSchema>;
 export type MonitorConfigPayload = z.output<typeof monitorConfigPayloadSchema>;
+export type OauthConnectionBatchDeletePayload = z.output<typeof oauthConnectionBatchDeletePayloadSchema>;
 export type OauthConnectionRebindPayload = z.output<typeof oauthConnectionRebindPayloadSchema>;
 export type OauthConnectionProxyUpdatePayload = z.output<typeof oauthConnectionProxyUpdatePayloadSchema>;
 export type OauthImportPayload = z.output<typeof oauthImportPayloadSchema>;
@@ -225,6 +230,11 @@ export function parseOauthStartPayload(input: unknown):
 export function parseOauthManualCallbackPayload(input: unknown):
 { success: true; data: OauthManualCallbackPayload } | { success: false; error: string } {
   return parseSupportRoutePayload(oauthManualCallbackPayloadSchema, input);
+}
+
+export function parseOauthConnectionBatchDeletePayload(input: unknown):
+{ success: true; data: OauthConnectionBatchDeletePayload } | { success: false; error: string } {
+  return parseSupportRoutePayload(oauthConnectionBatchDeletePayloadSchema, input);
 }
 
 export function parseOauthConnectionRebindPayload(input: unknown):

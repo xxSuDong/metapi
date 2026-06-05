@@ -17,7 +17,7 @@ import {
   resolvePlatformUserId,
   supportsDirectAccountRoutingConnection,
 } from './accountExtraConfig.js';
-import { invalidateTokenRouterCache } from './tokenRouter.js';
+import { invalidateTokenRouterCache, matchesModelPattern } from './tokenRouter.js';
 import { getBlockedBrandRules, isModelBlockedByBrand } from './brandMatcher.js';
 import { config } from '../config.js';
 import { setAccountRuntimeHealth } from './accountHealthService.js';
@@ -1074,7 +1074,7 @@ export async function refreshModelsForAccount(
         `api token discovery timeout (${Math.round(API_TOKEN_DISCOVERY_TIMEOUT_MS / 1000)}s)`,
       );
       if (discoveredApiToken && !isMaskedTokenValue(discoveredApiToken)) {
-        await ensureDefaultTokenForAccount(account.id, discoveredApiToken, { name: 'default', source: 'sync' });
+        await ensureDefaultTokenForAccount(account.id, discoveredApiToken, { name: 'default', source: 'sync', preserveExistingMetadata: true });
         await db.update(schema.accounts).set({
           apiToken: discoveredApiToken,
           updatedAt: new Date().toISOString(),
@@ -1102,7 +1102,7 @@ export async function refreshModelsForAccount(
   if (usesManagedTokens && enabledTokens.length === 0) {
     const fallback = discoveredApiToken || account.apiToken || null;
     if (fallback) {
-      await ensureDefaultTokenForAccount(account.id, fallback, { name: 'default', source: 'legacy' });
+      await ensureDefaultTokenForAccount(account.id, fallback, { name: 'default', source: 'legacy', preserveExistingMetadata: true });
       enabledTokens = await db.select()
         .from(schema.accountTokens)
         .where(and(
@@ -1519,7 +1519,54 @@ export async function rebuildTokenRoutesFromAvailability() {
       continue;
     }
     const modelPattern = (route.modelPattern || '').trim();
-    if (!modelPattern || !isExactModelPattern(modelPattern) || latestModelNames.has(modelPattern)) {
+    if (!modelPattern) {
+      continue;
+    }
+    if (!isExactModelPattern(modelPattern)) {
+      const routeChannels = channels.filter((channel) => channel.routeId === route.id);
+      const desiredCandidates = new Map<string, {
+        accountId: number;
+        tokenId: number | null;
+        oauthRouteUnitId: number | null;
+        sourceModel: string;
+      }>();
+      for (const [modelName, candidateMap] of modelCandidates.entries()) {
+        if (!matchesModelPattern(modelName, modelPattern)) continue;
+        for (const candidate of candidateMap.values()) {
+          const desired = { ...candidate, sourceModel: modelName };
+          desiredCandidates.set(`${buildCandidateKey(candidate)}:${modelName}`, desired);
+        }
+      }
+
+      for (const candidate of desiredCandidates.values()) {
+        const exists = routeChannels.some((channel) => (
+          buildChannelKey(channel) === buildCandidateKey(candidate)
+          && (channel.sourceModel || '').trim() === candidate.sourceModel
+        ));
+        if (exists) continue;
+
+        const inserted = await db.insert(schema.routeChannels).values({
+          routeId: route.id,
+          accountId: candidate.accountId,
+          tokenId: candidate.tokenId,
+          oauthRouteUnitId: candidate.oauthRouteUnitId,
+          sourceModel: candidate.sourceModel,
+          priority: 0,
+          weight: 10,
+          enabled: true,
+          manualOverride: false,
+        }).run();
+        const insertedId = getInsertedRowId(inserted);
+        if (insertedId == null) continue;
+        const created = await db.select().from(schema.routeChannels).where(eq(schema.routeChannels.id, insertedId)).get();
+        if (!created) continue;
+        channels.push(created);
+        routeChannels.push(created);
+        createdChannels++;
+      }
+      continue;
+    }
+    if (latestModelNames.has(modelPattern)) {
       continue;
     }
 

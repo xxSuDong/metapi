@@ -153,6 +153,40 @@ describe('PUT /api/routes/:id route rebuild', () => {
     expect(rebuiltAuto?.weight).toBe(10);
   });
 
+  it('adds a manually added exact-route channel to matching regex routes', async () => {
+    const candidate = await seedAccountWithToken('claude-opus-4-5');
+    const exactRoute = await db.insert(schema.tokenRoutes).values({
+      modelPattern: 'claude-opus-4-5',
+      enabled: true,
+    }).returning().get();
+    const regexRoute = await db.insert(schema.tokenRoutes).values({
+      modelPattern: 're:^claude-.*$',
+      enabled: true,
+    }).returning().get();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/routes/${exactRoute.id}/channels`,
+      payload: {
+        accountId: candidate.account.id,
+        tokenId: candidate.token.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const regexChannels = await db.select().from(schema.routeChannels)
+      .where(eq(schema.routeChannels.routeId, regexRoute.id))
+      .all();
+    expect(regexChannels).toContainEqual(expect.objectContaining({
+      routeId: regexRoute.id,
+      accountId: candidate.account.id,
+      tokenId: candidate.token.id,
+      sourceModel: 'claude-opus-4-5',
+      manualOverride: false,
+    }));
+  });
+
   it('rate limits repeated route overview reads', async () => {
     resetTokenRouteReadLimitersForTests({
       summaryPoints: 1,

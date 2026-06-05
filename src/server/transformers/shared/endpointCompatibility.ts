@@ -5,6 +5,7 @@ export type CompatibilityEndpointPreference = DownstreamFormat | 'responses';
 
 type ParsedEndpointErrorShape = {
   code: string;
+  detail: string;
   message: string;
   text: string;
   type: string;
@@ -68,6 +69,7 @@ function parseEndpointErrorShape(upstreamErrorText?: string | null): ParsedEndpo
   if (!text) {
     return {
       code: '',
+      detail: '',
       message: '',
       text: '',
       type: '',
@@ -81,6 +83,7 @@ function parseEndpointErrorShape(upstreamErrorText?: string | null): ParsedEndpo
       : parsed;
     return {
       code: asTrimmedString(error.code).toLowerCase(),
+      detail: asTrimmedString(error.detail).toLowerCase(),
       message: asTrimmedString(error.message).toLowerCase(),
       text,
       type: asTrimmedString(error.type).toLowerCase(),
@@ -88,6 +91,7 @@ function parseEndpointErrorShape(upstreamErrorText?: string | null): ParsedEndpo
   } catch {
     return {
       code: '',
+      detail: '',
       message: '',
       text,
       type: '',
@@ -159,10 +163,11 @@ export function inferRequiredEndpointFromProtocolError(
   upstreamErrorText?: string | null,
 ): CompatibilityEndpoint | null {
   const parsed = parseEndpointErrorShape(upstreamErrorText);
-  const combined = `${parsed.text}\n${parsed.message}`;
+  const combined = `${parsed.text}\n${parsed.message}\n${parsed.detail}`;
   if (!combined.trim()) return null;
   if (/messages\s+is\s+required/i.test(combined)) return 'messages';
   if (/input\s+is\s+required/i.test(combined)) return 'responses';
+  if (/unsupported\s+parameter\s*:\s*previous_response_id/i.test(combined)) return 'responses';
   return null;
 }
 
@@ -194,7 +199,7 @@ export function hasEndpointMismatchHint(upstreamErrorText?: string | null): bool
     'invalid url',
   ];
   return phrases.some((phrase) => (
-    parsed.text.includes(phrase) || parsed.message.includes(phrase)
+    parsed.text.includes(phrase) || parsed.message.includes(phrase) || parsed.detail.includes(phrase)
   )) || inferSuggestedEndpointFromUpstreamError(upstreamErrorText) !== null;
 }
 

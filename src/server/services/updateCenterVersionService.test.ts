@@ -17,6 +17,7 @@ import {
   fetchDockerHubTagCandidates,
   fetchLatestDockerHubTag,
   fetchLatestStableGitHubRelease,
+  getCurrentRuntimeVersion,
   parseStableSemVer,
   resolvePreferredDeploySource,
   selectDockerHubTagCandidates,
@@ -67,6 +68,22 @@ describe('update center version service', () => {
       expect(v200).not.toBeNull();
       expect(compareStableSemVer(v120!, v1100!)).toBeLessThan(0);
       expect(compareStableSemVer(v200!, v1100!)).toBeGreaterThan(0);
+    });
+  });
+
+  describe('getCurrentRuntimeVersion', () => {
+    it('uses the injected desktop app version when package.json is unavailable at runtime', () => {
+      const previous = process.env.METAPI_APP_VERSION;
+      process.env.METAPI_APP_VERSION = '9.8.7';
+      try {
+        expect(getCurrentRuntimeVersion({ cwd: '/path/without/package-json' })).toBe('9.8.7');
+      } finally {
+        if (previous === undefined) {
+          delete process.env.METAPI_APP_VERSION;
+        } else {
+          process.env.METAPI_APP_VERSION = previous;
+        }
+      }
     });
   });
 

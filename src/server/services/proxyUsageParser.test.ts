@@ -124,7 +124,7 @@ describe('proxyUsageParser', () => {
     expect(usage).toEqual({
       promptTokens: 120,
       completionTokens: 30,
-      totalTokens: 150,
+      totalTokens: 1190,
       cacheReadTokens: 1000,
       cacheCreationTokens: 40,
       promptTokensIncludeCache: false,

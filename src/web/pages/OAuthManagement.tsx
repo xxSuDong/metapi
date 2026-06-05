@@ -344,6 +344,7 @@ function resolveConnectionEmailLabel(connection: OAuthConnectionInfo): string {
 }
 
 function resolveConnectionStatusLabel(status?: string): string {
+  if (status === 'expired') return '已过期';
   return status === 'abnormal' ? '异常' : '正常';
 }
 
@@ -1217,15 +1218,16 @@ export default function OAuthManagement() {
     }
     setActionLoadingKey('delete:selected');
     try {
-      const results = await Promise.allSettled(selectedConnectionIds.map((accountId) => api.deleteOAuthConnection(accountId)));
-      const failed = results.filter((item) => item.status === 'rejected').length;
+      const result = await api.deleteOAuthConnectionsBatch(selectedConnectionIds);
       await loadConnections();
       setSelectedConnectionIds([]);
-      if (failed > 0) {
-        setSessionInfo(`批量删除完成，${failed} 个连接删除失败`);
+      if (result.failed > 0) {
+        setSessionInfo(`批量删除完成，成功 ${result.deleted} 个，失败 ${result.failed} 个`);
       } else {
-        setSessionSuccess(`已删除 ${results.length} 个 OAuth 连接`);
+        setSessionSuccess(`已删除 ${result.deleted} 个 OAuth 连接`);
       }
+    } catch (error: any) {
+      setSessionError(error?.message || '批量删除 OAuth 连接失败');
     } finally {
       setActionLoadingKey('');
     }
@@ -1777,7 +1779,7 @@ export default function OAuthManagement() {
                       <span className={`badge oauth-badge ${connection.provider === 'codex' ? 'badge-info' : 'badge-primary'}`}>
                         {connection.provider}
                       </span>
-                      <span className={`badge oauth-badge ${connection.status === 'abnormal' ? 'badge-warning' : 'badge-success'}`}>
+                      <span className={`badge oauth-badge ${connection.status === 'expired' || connection.status === 'abnormal' ? 'badge-warning' : 'badge-success'}`}>
                         {resolveConnectionStatusLabel(connection.status)}
                       </span>
                     </div>

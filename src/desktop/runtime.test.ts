@@ -9,7 +9,7 @@ import {
 } from './runtime.js';
 
 describe('desktop runtime helpers', () => {
-  it('builds desktop server env with external listen host and app directories', () => {
+  it('builds desktop server env with external listen host, app version, and app directories', () => {
     const env = buildDesktopServerEnv({
       inheritedEnv: {
         AUTH_TOKEN: 'admin-token',
@@ -18,12 +18,14 @@ describe('desktop runtime helpers', () => {
       userDataDir: '/tmp/metapi-data',
       logsDir: '/tmp/metapi-logs',
       port: 4312,
+      appVersion: '9.8.7',
     });
 
     expect(env.HOST).toBe('0.0.0.0');
     expect(env.PORT).toBe('4312');
     expect(env.DATA_DIR).toBe('/tmp/metapi-data');
     expect(env.METAPI_LOG_DIR).toBe('/tmp/metapi-logs');
+    expect(env.METAPI_APP_VERSION).toBe('9.8.7');
     expect(env.AUTH_TOKEN).toBe('admin-token');
     expect(env.PROXY_TOKEN).toBe('proxy-token');
   });

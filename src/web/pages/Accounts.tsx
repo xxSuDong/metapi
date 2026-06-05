@@ -84,6 +84,7 @@ function createTokenForm(credentialMode: "session" | "apikey" = "session") {
     platformUserId: "",
     refreshToken: "",
     tokenExpiresAt: "",
+    proxyUrl: "",
     credentialMode,
     skipModelFetch: false,
   };
@@ -423,6 +424,7 @@ export default function Accounts() {
           ? parseInt(tokenForm.platformUserId)
           : undefined,
         credentialMode,
+        proxyUrl: tokenForm.proxyUrl.trim() || undefined,
       });
       setVerifyResult(result);
       if (result.success) {
@@ -478,6 +480,7 @@ export default function Accounts() {
           isSub2ApiSelected && tokenForm.tokenExpiresAt.trim()
             ? Number.parseInt(tokenForm.tokenExpiresAt.trim(), 10)
             : undefined,
+        proxyUrl: tokenForm.proxyUrl.trim() || undefined,
         credentialMode,
         skipModelFetch: tokenForm.skipModelFetch,
       });
@@ -1758,6 +1761,34 @@ export default function Accounts() {
                         若站点要求 New-Api-User / User-ID，请在这里提前填写。
                       </div>
                     </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                      }}
+                    >
+                      <input
+                        placeholder="代理地址（可选，如 http://127.0.0.1:7890）"
+                        value={tokenForm.proxyUrl}
+                        onChange={(e) =>
+                          setTokenForm((f) => ({
+                            ...f,
+                            proxyUrl: e.target.value,
+                          }))
+                        }
+                        style={inputStyle}
+                      />
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "var(--color-text-muted)",
+                        }}
+                      >
+                        覆盖站点和系统代理，留空则使用站点设置。支持 http/https/socks5
+                        协议。
+                      </div>
+                    </div>
                     {isSub2ApiSelected && (
                       <>
                         <div
@@ -2209,6 +2240,28 @@ export default function Accounts() {
                     style={{ fontSize: 12, color: "var(--color-text-muted)" }}
                   >
                     若站点要求 New-Api-User / User-ID，请在这里提前填写。
+                  </div>
+                </div>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 4 }}
+                >
+                  <input
+                    placeholder="代理地址（可选，如 http://127.0.0.1:7890）"
+                    value={tokenForm.proxyUrl}
+                    onChange={(e) =>
+                      setTokenForm((f) => ({
+                        ...f,
+                        proxyUrl: e.target.value,
+                        credentialMode: "apikey",
+                      }))
+                    }
+                    style={inputStyle}
+                  />
+                  <div
+                    style={{ fontSize: 12, color: "var(--color-text-muted)" }}
+                  >
+                    覆盖站点和系统代理，留空则使用站点设置。支持 http/https/socks5
+                    协议。
                   </div>
                 </div>
                 <label

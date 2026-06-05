@@ -93,6 +93,42 @@ const METAPI_INTERNAL_HEADER_BLOCKLIST = new Set([
 ]);
 
 const ANTIGRAVITY_RUNTIME_USER_AGENT = 'antigravity/1.19.6 darwin/arm64';
+const MINIMAX_HOST_SUFFIXES = ['minimaxi.com', 'minimax.chat'];
+const MINIMAX_MODEL_PATTERN = /(?:^|[-_/])minimax(?:[-_/]|$)|^MiniMax/i;
+
+function isMiniMaxOpenAiCompatibleRequest(input: {
+  siteUrl?: string;
+  sitePlatform: string;
+  modelName?: string;
+  requestedModel?: string;
+}): boolean {
+  if (input.sitePlatform !== 'openai') return false;
+  const modelCandidates = [input.modelName, input.requestedModel]
+    .map((value) => asTrimmedString(value))
+    .filter(Boolean);
+  if (modelCandidates.some((model) => MINIMAX_MODEL_PATTERN.test(model))) return true;
+
+  try {
+    const hostname = new URL(asTrimmedString(input.siteUrl)).hostname.toLowerCase();
+    return MINIMAX_HOST_SUFFIXES.some((suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`));
+  } catch {
+    return false;
+  }
+}
+
+function applyMiniMaxOpenAiCompatibilityDefaults<T extends Record<string, unknown>>(body: T, input: {
+  siteUrl?: string;
+  sitePlatform: string;
+  modelName?: string;
+  requestedModel?: string;
+}): T {
+  if (!isMiniMaxOpenAiCompatibleRequest(input)) return body;
+  if (Object.prototype.hasOwnProperty.call(body, 'reasoning_split')) return body;
+  return {
+    ...body,
+    reasoning_split: true,
+  };
+}
 
 function shouldSkipPassthroughHeader(key: string): boolean {
   if (HOP_BY_HOP_HEADERS.has(key) || BLOCKED_PASSTHROUGH_HEADERS.has(key)) return true;
@@ -717,11 +753,16 @@ export function buildUpstreamEndpointRequest(input: {
   }
 
   const headers = ensureStreamAcceptHeader(commonHeaders, input.stream);
-  const chatBody = {
+  const chatBody = applyMiniMaxOpenAiCompatibilityDefaults({
     ...openaiBody,
     model: input.modelName,
     stream: input.stream,
-  };
+  }, {
+    siteUrl: input.siteUrl,
+    sitePlatform,
+    modelName: input.modelName,
+    requestedModel: requestedModelForPayloadRules,
+  });
   const configuredChatBody = applyConfiguredPayloadRules(
     input.downstreamFormat === 'responses'
       ? sanitizeResponsesFallbackChatBody(chatBody)

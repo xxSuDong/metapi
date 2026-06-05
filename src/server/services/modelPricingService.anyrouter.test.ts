@@ -79,4 +79,43 @@ describe('modelPricingService anyrouter pricing', () => {
     expect(fetchMock.mock.calls[1][1]?.headers?.Cookie || '').toContain('cdn_sec_tc=challenge-seed');
     expect(fetchMock.mock.calls[1][1]?.headers?.Cookie || '').toContain(`acw_sc__v2=${ANYROUTER_CHALLENGE_ACW}`);
   });
+
+  it('falls back to Anthropic cache ratios for AnyRouter Claude pricing when upstream omits cache fields', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      data: [{
+        model_name: 'claude-opus-4-7',
+        quota_type: 0,
+        model_ratio: 2.5,
+        model_price: 0,
+        owner_by: '',
+        completion_ratio: 5,
+        enable_groups: ['default'],
+      }],
+      group_ratio: { default: 1 },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+    }));
+
+    const catalog = await fetchModelPricingCatalog({
+      site: {
+        id: 903,
+        url: 'https://anyrouter-no-cache-ratio.example.com',
+        platform: 'anyrouter',
+      },
+      account: {
+        id: 78,
+        accessToken: '',
+      },
+      modelName: 'claude-opus-4-7',
+      totalTokens: 0,
+    });
+
+    expect(catalog?.models[0]?.groupPricing?.default).toMatchObject({
+      inputPerMillion: 5,
+      outputPerMillion: 25,
+      cacheReadPerMillion: 0.5,
+      cacheCreationPerMillion: 6.25,
+    });
+  });
 });

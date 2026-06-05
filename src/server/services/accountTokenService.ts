@@ -187,7 +187,13 @@ export async function getPreferredAccountToken(accountId: number) {
 export async function ensureDefaultTokenForAccount(
   accountId: number,
   tokenValue: string,
-  options?: { name?: string; source?: string; enabled?: boolean; tokenGroup?: string | null },
+  options?: {
+    name?: string;
+    source?: string;
+    enabled?: boolean;
+    tokenGroup?: string | null;
+    preserveExistingMetadata?: boolean;
+  },
 ): Promise<number | null> {
   const normalizedToken = normalizeTokenValue(tokenValue);
   if (!normalizedToken) return null;
@@ -221,7 +227,7 @@ export async function ensureDefaultTokenForAccount(
       ? (await db.select().from(schema.accountTokens).where(eq(schema.accountTokens.id, insertedId)).get()) ?? null
       : null;
     if (!target) return null;
-  } else {
+  } else if (!options?.preserveExistingMetadata) {
     await db.update(schema.accountTokens)
       .set({
         name: options?.name ? normalizeTokenName(options.name) : target.name,
@@ -234,12 +240,22 @@ export async function ensureDefaultTokenForAccount(
       })
       .where(eq(schema.accountTokens.id, target.id))
       .run();
+  } else if (resolveAccountTokenValueStatus(target) !== ACCOUNT_TOKEN_VALUE_STATUS_READY) {
+    await db.update(schema.accountTokens)
+      .set({
+        valueStatus: ACCOUNT_TOKEN_VALUE_STATUS_READY,
+        updatedAt: now,
+      })
+      .where(eq(schema.accountTokens.id, target.id))
+      .run();
   }
 
-  await db.update(schema.accountTokens)
-    .set({ isDefault: false, updatedAt: now })
-    .where(and(eq(schema.accountTokens.accountId, accountId), ne(schema.accountTokens.id, target.id)))
-    .run();
+  if (!options?.preserveExistingMetadata) {
+    await db.update(schema.accountTokens)
+      .set({ isDefault: false, updatedAt: now })
+      .where(and(eq(schema.accountTokens.accountId, accountId), ne(schema.accountTokens.id, target.id)))
+      .run();
+  }
 
   await updateAccountApiToken(accountId, normalizedToken);
   return target.id;
@@ -323,19 +339,13 @@ export async function syncTokensFromUpstream(accountId: number, upstreamTokens: 
     if (byToken) {
       await db.update(schema.accountTokens)
         .set({
-          name: tokenName,
-          tokenGroup,
           valueStatus: ACCOUNT_TOKEN_VALUE_STATUS_READY,
           source: 'sync',
-          enabled,
           updatedAt: now,
         })
         .where(eq(schema.accountTokens.id, byToken.id))
         .run();
-      byToken.name = tokenName;
-      byToken.tokenGroup = tokenGroup;
       byToken.valueStatus = ACCOUNT_TOKEN_VALUE_STATUS_READY;
-      byToken.enabled = enabled;
       byToken.source = 'sync';
       byToken.updatedAt = now;
       updated++;
@@ -364,19 +374,13 @@ export async function syncTokensFromUpstream(accountId: number, upstreamTokens: 
 
       await db.update(schema.accountTokens)
         .set({
-          name: tokenName,
-          tokenGroup,
           valueStatus: ACCOUNT_TOKEN_VALUE_STATUS_READY,
           source: 'sync',
-          enabled,
           updatedAt: now,
         })
         .where(eq(schema.accountTokens.id, readyMaskedMatch.id))
         .run();
-      readyMaskedMatch.name = tokenName;
-      readyMaskedMatch.tokenGroup = tokenGroup;
       readyMaskedMatch.valueStatus = ACCOUNT_TOKEN_VALUE_STATUS_READY;
-      readyMaskedMatch.enabled = enabled;
       readyMaskedMatch.source = 'sync';
       readyMaskedMatch.updatedAt = now;
 

@@ -543,7 +543,7 @@ export async function sitesRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'initializationPresetId does not match the selected platform.' });
     }
     if (!detectedPlatform) {
-      return { error: 'Could not detect platform. Please specify manually.' };
+      return reply.code(400).send({ error: 'Could not detect platform. Please specify manually.' });
     }
     const conflictingSite = findExistingSiteBinding(existingSites, detectedPlatform, canonicalUrl);
     if (conflictingSite) {
@@ -968,6 +968,9 @@ export async function sitesRoutes(app: FastifyInstance) {
     }
 
     const result = await detectSite(parsedBody.data.url);
-    return result || { error: 'Could not detect platform' };
+    if (!result) {
+      return reply.code(400).send({ error: 'Could not detect platform' });
+    }
+    return result;
   });
 }

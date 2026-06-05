@@ -920,11 +920,13 @@ export async function listOauthConnections(options: {
     const oauth = getOauthInfoFromAccount(row.accounts);
     if (!oauth) return [];
     const models = modelMap.get(row.accounts.id) || [];
-    const status = (
-      oauth.modelDiscoveryStatus === 'abnormal'
-      || row.accounts.status !== 'active'
-      || row.sites.status !== 'active'
-    ) ? 'abnormal' : 'healthy';
+    const status = row.accounts.status === 'expired'
+      ? 'expired'
+      : (
+        oauth.modelDiscoveryStatus === 'abnormal'
+        || row.accounts.status !== 'active'
+        || row.sites.status !== 'active'
+      ) ? 'abnormal' : 'healthy';
     const routeUnit = routeParticipationByAccount.get(row.accounts.id) || null;
     const routeParticipation = routeUnit
       ? {
@@ -984,6 +986,55 @@ export async function deleteOauthConnection(accountId: number) {
   await db.delete(schema.accounts).where(eq(schema.accounts.id, accountId)).run();
   await routeRefreshWorkflow.rebuildRoutesOnly();
   return { success: true };
+}
+
+export async function deleteOauthConnectionsBatch(accountIds: number[]) {
+  const uniqueIds = Array.from(new Set(accountIds.filter((id) => Number.isFinite(id) && id > 0)));
+  if (uniqueIds.length <= 0) {
+    return {
+      success: false,
+      deleted: 0,
+      failed: 0,
+      items: [],
+    };
+  }
+
+  const rows = await db.select({
+    id: schema.accounts.id,
+    extraConfig: schema.accounts.extraConfig,
+    oauthProvider: schema.accounts.oauthProvider,
+  }).from(schema.accounts)
+    .where(inArray(schema.accounts.id, uniqueIds))
+    .all();
+  const accountById = new Map(rows.map((account) => [account.id, account]));
+  const deletableIds: number[] = [];
+  const items = uniqueIds.map((accountId) => {
+    const account = accountById.get(accountId);
+    if (!account) {
+      return { accountId, success: false, error: 'oauth account not found' };
+    }
+    if (!getOauthInfoFromAccount(account)) {
+      return { accountId, success: false, error: 'account is not managed by oauth' };
+    }
+    deletableIds.push(accountId);
+    return { accountId, success: true };
+  });
+
+  if (deletableIds.length > 0) {
+    await db.delete(schema.accounts)
+      .where(inArray(schema.accounts.id, deletableIds))
+      .run();
+    await routeRefreshWorkflow.rebuildRoutesOnly();
+  }
+
+  const deleted = items.filter((item) => item.success).length;
+  const failed = items.length - deleted;
+  return {
+    success: failed === 0,
+    deleted,
+    failed,
+    items,
+  };
 }
 
 export async function refreshOauthConnectionQuota(accountId: number) {

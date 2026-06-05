@@ -4,6 +4,7 @@ import { sendNotification } from './notifyService.js';
 import { setAccountRuntimeHealth } from './accountHealthService.js';
 import { appendSessionTokenRebindHint } from './alertRules.js';
 import { formatUtcSqlDateTime } from './localTimeService.js';
+import { getCredentialModeFromExtraConfig } from './accountExtraConfig.js';
 
 export async function reportTokenExpired(params: {
   accountId: number;
@@ -27,10 +28,17 @@ export async function reportTokenExpired(params: {
     createdAt,
   }).run();
 
-  await db.update(schema.accounts).set({
-    status: 'expired',
-    updatedAt: new Date().toISOString(),
-  }).where(eq(schema.accounts.id, params.accountId)).run();
+  const account = await db.select()
+    .from(schema.accounts)
+    .where(eq(schema.accounts.id, params.accountId))
+    .get();
+
+  if (!account || getCredentialModeFromExtraConfig(account.extraConfig) !== 'apikey') {
+    await db.update(schema.accounts).set({
+      status: 'expired',
+      updatedAt: new Date().toISOString(),
+    }).where(eq(schema.accounts.id, params.accountId)).run();
+  }
 
   setAccountRuntimeHealth(params.accountId, {
     state: 'unhealthy',

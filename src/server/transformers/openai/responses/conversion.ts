@@ -483,6 +483,24 @@ const RESPONSES_TOOL_CALL_OUTPUT_TYPES = new Set([
   'custom_tool_call_output',
 ]);
 
+const RESPONSES_NATIVE_OUTPUT_ONLY_INPUT_TYPES = new Set([
+  'reasoning',
+]);
+
+function stripNativeResponsesOutputOnlyInputItems(input: unknown): unknown {
+  if (!Array.isArray(input)) {
+    if (!isRecord(input)) return input;
+    const type = asTrimmedString(input.type).toLowerCase();
+    return RESPONSES_NATIVE_OUTPUT_ONLY_INPUT_TYPES.has(type) ? [] : input;
+  }
+
+  return input.filter((item) => {
+    if (!isRecord(item)) return true;
+    const type = asTrimmedString(item.type).toLowerCase();
+    return !RESPONSES_NATIVE_OUTPUT_ONLY_INPUT_TYPES.has(type);
+  });
+}
+
 function stripOrphanedResponsesToolOutputs(input: unknown): unknown {
   if (!Array.isArray(input)) return input;
 
@@ -562,6 +580,14 @@ export function sanitizeResponsesBodyForProxy(
     verbositySource: body.verbosity,
     defaultEncryptedReasoningInclude: options?.defaultEncryptedReasoningInclude,
   });
+
+  const strippedNativeInput = stripNativeResponsesOutputOnlyInputItems(normalized.input);
+  if (strippedNativeInput !== normalized.input) {
+    normalized = {
+      ...normalized,
+      input: strippedNativeInput,
+    };
+  }
 
   const sanitized: Record<string, unknown> = { ...normalized };
   for (const key of RESPONSES_COMPATIBILITY_FILTER_FIELDS) {

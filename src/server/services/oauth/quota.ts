@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { fetch } from 'undici';
 import { db, schema } from '../../db/index.js';
+import { CODEX_CLIENT_VERSION, CODEX_DEFAULT_USER_AGENT } from '../../shared/codexClientDefaults.js';
 import { mergeAccountExtraConfig } from '../accountExtraConfig.js';
 import { runWithSiteApiEndpointPool } from '../siteApiEndpointService.js';
 import { withExplicitProxyRequestInit } from '../siteProxy.js';
@@ -49,8 +50,8 @@ type NormalizedCodexQuotaHeaders = {
 };
 
 const CODEX_QUOTA_PROBE_MODEL = 'gpt-5.4';
-const CODEX_QUOTA_PROBE_VERSION = '0.101.0';
-const CODEX_QUOTA_PROBE_USER_AGENT = 'codex_cli_rs/0.101.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464';
+const CODEX_QUOTA_PROBE_VERSION = CODEX_CLIENT_VERSION;
+const CODEX_QUOTA_PROBE_USER_AGENT = CODEX_DEFAULT_USER_AGENT;
 const CODEX_QUOTA_PROBE_BETA = 'responses-2025-03-11';
 const CODEX_QUOTA_PROBE_INSTRUCTIONS = 'You are a helpful assistant.';
 const CODEX_QUOTA_PROBE_TIMEOUT_MS = 10_000;
