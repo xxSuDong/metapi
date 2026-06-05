@@ -1579,6 +1579,13 @@ body {
   letter-spacing: -0.02em;
 }
 
+.text-truncate {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .dashboard-stat-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
