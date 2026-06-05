@@ -8,6 +8,7 @@ type AdminSnapshotStoreModule = typeof import("./adminSnapshotStore.js");
 
 describe("adminSnapshotStore", () => {
   let db: DbModule["db"];
+  let closeDbConnections: DbModule["closeDbConnections"];
   let schema: DbModule["schema"];
   let readAdminSnapshot: AdminSnapshotStoreModule["readAdminSnapshot"];
   let writeAdminSnapshot: AdminSnapshotStoreModule["writeAdminSnapshot"];
@@ -24,6 +25,7 @@ describe("adminSnapshotStore", () => {
     const dbModule = await import("../db/index.js");
     const storeModule = await import("./adminSnapshotStore.js");
     db = dbModule.db;
+    closeDbConnections = dbModule.closeDbConnections;
     schema = dbModule.schema;
     readAdminSnapshot = storeModule.readAdminSnapshot;
     writeAdminSnapshot = storeModule.writeAdminSnapshot;
@@ -34,7 +36,8 @@ describe("adminSnapshotStore", () => {
     await db.delete(schema.adminSnapshots).run();
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    await closeDbConnections();
     if (previousDataDir === undefined) {
       delete process.env.DATA_DIR;
     } else {
