@@ -1,5 +1,74 @@
+import ts from 'typescript';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { translateText } from './i18n.js';
+
+const HAS_HAN_RE = /[㐀-鿿]/;
+
+function collectSourceChineseStrings(rootDir: string): string[] {
+  const files: string[] = [];
+
+  function walk(dir: string) {
+    for (const entry of readdirSync(dir)) {
+      const filePath = join(dir, entry);
+      const stat = statSync(filePath);
+      if (stat.isDirectory()) {
+        walk(filePath);
+        continue;
+      }
+      if (!/\.(tsx|ts)$/.test(entry)) continue;
+      if (/\.test\.(tsx|ts)$/.test(entry)) continue;
+      if (entry.startsWith('i18n')) continue;
+      files.push(filePath);
+    }
+  }
+
+  walk(rootDir);
+
+  const values: string[] = [];
+  const seen = new Set<string>();
+
+  function add(filePath: string, raw: string | undefined) {
+    const text = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (!text || !HAS_HAN_RE.test(text)) return;
+    if (text.length > 260) return;
+    if (/[<>]/.test(text)) return;
+    const key = `${relative(rootDir, filePath)}\t${text}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    values.push(text);
+  }
+
+  for (const filePath of files) {
+    const source = readFileSync(filePath, 'utf8');
+    const sourceFile = ts.createSourceFile(
+      filePath,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    );
+
+    function visit(node: ts.Node) {
+      if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+        add(filePath, node.text);
+      } else if (ts.isJsxText(node)) {
+        add(filePath, node.getText(sourceFile));
+      } else if (ts.isTemplateExpression(node)) {
+        add(filePath, node.head.text);
+        for (const span of node.templateSpans) {
+          add(filePath, span.literal.text);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
+  }
+
+  return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+}
 
 describe('translateText', () => {
   it('keeps zh text unchanged in zh mode', () => {
@@ -45,34 +114,15 @@ describe('translateText', () => {
     }
   });
 
-  it('translates internal monitor dashboard labels without Untranslated placeholders', () => {
-    const samples = [
-      '实例监控',
-      '监控当前 Metapi 的站点、账号、路由和请求健康',
-      '账号健康',
-      '路由通道',
-      '近 24h 请求',
-      '站点状态',
-      '健康检查',
-      '检查中...',
-      '异常账号',
-      '风险路由',
-      '近期失败请求',
-      '暂无异常账号',
-      '暂无风险路由',
-      '暂无近期失败请求',
-      '快速排查：',
-      '更新时间：',
-      '波动',
-      '检查时间',
-      '站点/账号',
-      '状态码',
-    ];
+  it('translates all current web source Chinese UI literals in strict English mode', () => {
+    const webRoot = join(process.cwd(), 'src/web');
+    if (!existsSync(webRoot)) return;
 
-    for (const sample of samples) {
-      const translated = translateText(sample, 'en');
-      expect(translated, sample).not.toBe('Untranslated');
-      expect(translated, sample).not.toMatch(/[㐀-鿿]/);
-    }
+    const samples = collectSourceChineseStrings(webRoot);
+    const unresolved = samples
+      .map((sample) => ({ sample, translated: translateText(sample, 'en') }))
+      .filter(({ translated }) => translated === 'Untranslated' || HAS_HAN_RE.test(translated));
+
+    expect(unresolved).toEqual([]);
   });
 });
