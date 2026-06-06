@@ -1424,6 +1424,8 @@ export const api = {
     request("/api/settings/notify/test", { method: "POST" }),
 
   // Monitor embed
+  getMonitorOverview: (options?: { refresh?: boolean }) =>
+    request(`/api/monitor/overview${options?.refresh ? '?refresh=1' : ''}`),
   getMonitorConfig: () => request("/api/monitor/config"),
   updateMonitorConfig: (data: { ldohCookie?: string | null }) =>
     request("/api/monitor/config", {
