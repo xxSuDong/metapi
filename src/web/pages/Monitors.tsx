@@ -1,228 +1,347 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useToast } from '../components/Toast.js';
-import { useAnimatedVisibility } from '../components/useAnimatedVisibility.js';
-import { tr } from '../i18n.js';
 
-type MonitorSite = {
-  id: string;
-  name: string;
-  url: string;
-  description: string;
-  requiresLinuxDoOAuth?: boolean;
+type RuntimeHealthInfo = {
+  state: string;
+  reason: string;
+  source?: string;
+  checkedAt?: string | null;
 };
 
-type MonitorConfig = {
-  ldohCookieConfigured: boolean;
-  ldohCookieMasked?: string;
+type MonitorOverview = {
+  generatedAt: string;
+  accounts: {
+    total: number;
+    healthy: number;
+    unhealthy: number;
+    unknown: number;
+    disabled: number;
+    expired: number;
+    problemItems: Array<{
+      id: number;
+      username: string | null;
+      siteId: number;
+      siteName: string;
+      status: string | null;
+      runtimeHealth: RuntimeHealthInfo;
+    }>;
+  };
+  sites: {
+    total: number;
+    active: number;
+    disabled: number;
+  };
+  routes: {
+    total: number;
+    enabled: number;
+    disabled: number;
+    zeroEnabledChannels: number;
+    cooldownChannels: number;
+    problemItems: Array<{
+      id: number;
+      title: string;
+      modelPattern: string;
+      enabled: boolean;
+      channelCount: number;
+      enabledChannelCount: number;
+      cooldownChannelCount: number;
+      failedChannelCount: number;
+      siteNames: string[];
+      decisionRefreshedAt: string | null;
+    }>;
+  };
+  traffic24h: {
+    total: number;
+    success: number;
+    failed: number;
+    retried: number;
+    successRate: number;
+    averageLatencyMs: number | null;
+    totalCost: number;
+    totalTokens: number;
+    recentFailures: Array<{
+      id: number;
+      modelRequested: string | null;
+      modelActual: string | null;
+      siteName: string | null;
+      accountUsername: string | null;
+      httpStatus: number | null;
+      errorMessage: string | null;
+      createdAt: string | null;
+    }>;
+  };
 };
 
-const MONITOR_SITES: MonitorSite[] = [
-  {
-    id: 'check-linux-do',
-    name: 'check.linux.do',
-    url: 'https://check.linux.do',
-    description: 'LinuxDo 可用性监控',
-  },
-  {
-    id: 'ldoh-105117',
-    name: 'ldoh.105117.xyz',
-    url: 'https://ldoh.105117.xyz',
-    description: 'LDOH 监控面板',
-    requiresLinuxDoOAuth: true,
-  },
-];
+function formatNumber(value: number | null | undefined): string {
+  return Number(value || 0).toLocaleString();
+}
+
+function formatCost(value: number): string {
+  return `$${Number(value || 0).toFixed(4)}`;
+}
+
+function formatTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+function statusLabel(state: string): string {
+  switch (state) {
+    case 'healthy': return '健康';
+    case 'unhealthy': return '异常';
+    case 'degraded': return '波动';
+    case 'disabled': return '禁用';
+    case 'unknown': return '未知';
+    default: return state || '未知';
+  }
+}
+
+function MetricCard(props: { title: string; value: string; detail: string; tone?: 'success' | 'warning' | 'danger' | 'info' }) {
+  return (
+    <div className={`monitor-metric-card monitor-metric-${props.tone || 'info'}`.trim()}>
+      <div className="monitor-metric-title">{props.title}</div>
+      <div className="monitor-metric-value">{props.value}</div>
+      <div className="monitor-metric-detail">{props.detail}</div>
+    </div>
+  );
+}
+
+function StatusBadge({ state }: { state: string }) {
+  const normalized = state || 'unknown';
+  return <span className={`monitor-status-badge monitor-status-${normalized}`}>{statusLabel(normalized)}</span>;
+}
+
+function EmptyState({ children }: { children: string }) {
+  return <div className="monitor-empty-state">{children}</div>;
+}
 
 export default function Monitors() {
   const toast = useToast();
-  const [activeSiteId, setActiveSiteId] = useState(MONITOR_SITES[0].id);
-  const [reloadSeed, setReloadSeed] = useState(0);
-  const [loaded, setLoaded] = useState(false);
-  const [showFallbackHint, setShowFallbackHint] = useState(false);
-  const [monitorConfig, setMonitorConfig] = useState<MonitorConfig>({ ldohCookieConfigured: false });
-  const [cookieInput, setCookieInput] = useState('');
-  const [savingCookie, setSavingCookie] = useState(false);
+  const [overview, setOverview] = useState<MonitorOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [checkingHealth, setCheckingHealth] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const activeSite = useMemo(
-    () => MONITOR_SITES.find((site) => site.id === activeSiteId) || MONITOR_SITES[0],
-    [activeSiteId],
-  );
-
-  const loadMonitorConfig = async () => {
+  const loadOverview = async (refresh = false) => {
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
+    setErrorMessage('');
     try {
-      const res = await api.getMonitorConfig();
-      setMonitorConfig({
-        ldohCookieConfigured: !!res?.ldohCookieConfigured,
-        ldohCookieMasked: typeof res?.ldohCookieMasked === 'string' ? res.ldohCookieMasked : '',
-      });
+      const res = await api.getMonitorOverview({ refresh });
+      setOverview(res as MonitorOverview);
     } catch (err: any) {
-      toast.error(err?.message || '加载监控配置失败');
+      const message = err?.message || '加载实例监控失败';
+      setErrorMessage('加载实例监控失败');
+      toast.error(message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
-    void loadMonitorConfig();
-    // Set HttpOnly monitor auth cookie for iframe proxy.
-    void api.initMonitorSession().catch(() => {});
+    void loadOverview(false);
   }, []);
 
-  useEffect(() => {
-    setLoaded(false);
-    setShowFallbackHint(false);
-    const timer = window.setTimeout(() => {
-      setShowFallbackHint(true);
-    }, 4500);
-    void api.initMonitorSession().catch(() => {});
-    return () => window.clearTimeout(timer);
-  }, [activeSiteId, reloadSeed]);
-
-  const usingCookieProxy = activeSite.id === 'ldoh-105117' && monitorConfig.ldohCookieConfigured;
-  const oauthHintPresence = useAnimatedVisibility(Boolean(activeSite.requiresLinuxDoOAuth), 220);
-  const fallbackHintPresence = useAnimatedVisibility(showFallbackHint && !loaded, 180);
-  const directSiteUrl = `${activeSite.url.replace(/\/$/, '')}/`;
-  const iframeUrl = usingCookieProxy ? '/monitor-proxy/ldoh/' : directSiteUrl;
-  const ldohOauthUrl = `${directSiteUrl}api/oauth/initiate?returnTo=%2F`;
-
-  const handleSaveCookie = async () => {
-    setSavingCookie(true);
+  const handleHealthCheck = async () => {
+    setCheckingHealth(true);
     try {
-      await api.updateMonitorConfig({ ldohCookie: cookieInput.trim() || null });
-      await loadMonitorConfig();
-      setCookieInput('');
-      setReloadSeed((prev) => prev + 1);
-      toast.success('LDOH Cookie 已更新');
+      await api.refreshAccountHealth({ wait: true });
+      await loadOverview(true);
+      toast.success('账号健康检查已完成');
     } catch (err: any) {
-      toast.error(err?.message || '保存 Cookie 失败');
+      toast.error(err?.message || '健康检查失败');
     } finally {
-      setSavingCookie(false);
+      setCheckingHealth(false);
     }
   };
 
-  const fallbackHint = usingCookieProxy
-    ? '代理模式已启用：若仍无法加载，请检查 Cookie 是否过期后重新保存。'
-    : '当前站点可能禁止 iframe 内嵌，或 OAuth 跨站 Cookie 受限。建议先新窗口授权再回到此页刷新。';
+  const successTone = useMemo(() => {
+    if (!overview) return 'info';
+    if (overview.traffic24h.successRate >= 95) return 'success';
+    if (overview.traffic24h.successRate >= 80) return 'warning';
+    return 'danger';
+  }, [overview]);
 
   return (
     <div className="animate-fade-in monitor-page">
       <div className="monitor-toolbar page-header">
         <div>
-          <h2 className="page-title">{tr('监控内嵌')}</h2>
-          <div style={{ marginTop: 6, fontSize: 13, color: 'var(--color-text-muted)' }}>
-            在 metapi 内查看外部站点监控页面。
-          </div>
+          <h2 className="page-title">实例监控</h2>
+          <div className="monitor-subtitle">监控当前 Metapi 的站点、账号、路由和请求健康</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="monitor-actions">
           <button
             type="button"
             className="btn btn-ghost"
             style={{ border: '1px solid var(--color-border)' }}
-            onClick={() => setReloadSeed((prev) => prev + 1)}
-            data-tooltip="重新加载当前站点"
-            aria-label="重新加载当前站点"
+            onClick={() => void loadOverview(true)}
+            disabled={refreshing || loading}
           >
-            刷新
+            {refreshing ? '刷新中...' : '刷新'}
           </button>
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => window.open(directSiteUrl, '_blank', 'noopener,noreferrer')}
-            data-tooltip="在新窗口直接打开目标站点"
-            aria-label="在新窗口直接打开目标站点"
+            onClick={handleHealthCheck}
+            disabled={checkingHealth || loading}
           >
-            新窗口打开
+            {checkingHealth ? '检查中...' : '健康检查'}
           </button>
         </div>
       </div>
 
-      <div className="monitor-tabs card">
-        {MONITOR_SITES.map((site) => (
-          <button
-            key={site.id}
-            type="button"
-            className={`monitor-tab ${site.id === activeSite.id ? 'active' : ''}`}
-            onClick={() => setActiveSiteId(site.id)}
-          >
-            <span>{site.name}</span>
-            <span className="monitor-tab-desc">{site.description}</span>
-          </button>
-        ))}
-      </div>
+      {errorMessage && <div className="monitor-hint">{errorMessage}</div>}
+      {loading && !overview && <div className="card monitor-section">加载实例监控中...</div>}
 
-      {oauthHintPresence.shouldRender && (
-        <div className={`monitor-oauth-hint card panel-presence ${oauthHintPresence.isVisible ? '' : 'is-closing'}`.trim()}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>
-            {usingCookieProxy ? '已启用 Cookie 代理模式' : '该站点需要 LinuxDo OAuth 授权'}
-          </div>
-          <div style={{ marginTop: 6, fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.65 }}>
-            {!usingCookieProxy && (
-              <>
-                1. 先点击“授权登录（新窗口）”完成 LinuxDo 登录。<br />
-                2. 回来后把 `ld_auth_session` 填到下方，启用 Cookie 代理内嵌。<br />
-              </>
-            )}
-            {usingCookieProxy && (
-              <>
-                当前使用服务端代理访问，不依赖跨站第三方 Cookie。<br />
-                已保存 Cookie：{monitorConfig.ldohCookieMasked || '(已配置)'}<br />
-              </>
-            )}
-            Cookie 过期后请重新粘贴保存。
-          </div>
-
-          <div className="monitor-cookie-row">
-            <input
-              value={cookieInput}
-              onChange={(e) => setCookieInput(e.target.value)}
-              placeholder="粘贴 ld_auth_session 或 ld_auth_session=xxx"
-              className="monitor-cookie-input"
+      {overview && (
+        <>
+          <div className="monitor-grid">
+            <MetricCard
+              title="账号健康"
+              value={`${overview.accounts.healthy}/${overview.accounts.total}`}
+              detail={`异常 ${overview.accounts.unhealthy} · 未知 ${overview.accounts.unknown} · 禁用 ${overview.accounts.disabled} · 过期 ${overview.accounts.expired}`}
+              tone={overview.accounts.unhealthy || overview.accounts.expired ? 'danger' : 'success'}
             />
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={handleSaveCookie}
-              disabled={savingCookie}
-            >
-              {savingCookie ? '保存中...' : (cookieInput.trim() ? '保存 Cookie' : '清空 Cookie')}
-            </button>
+            <MetricCard
+              title="路由通道"
+              value={`${overview.routes.enabled}/${overview.routes.total}`}
+              detail={`无可用通道 ${overview.routes.zeroEnabledChannels} · 冷却中 ${overview.routes.cooldownChannels}`}
+              tone={overview.routes.zeroEnabledChannels || overview.routes.cooldownChannels ? 'warning' : 'success'}
+            />
+            <MetricCard
+              title="近 24h 请求"
+              value={`${overview.traffic24h.successRate}%`}
+              detail={`总量 ${formatNumber(overview.traffic24h.total)} · 成功 ${formatNumber(overview.traffic24h.success)} · 失败 ${formatNumber(overview.traffic24h.failed)} · 平均 ${overview.traffic24h.averageLatencyMs ?? '—'}ms`}
+              tone={successTone}
+            />
+            <MetricCard
+              title="站点状态"
+              value={`${overview.sites.active}/${overview.sites.total}`}
+              detail={`禁用 ${overview.sites.disabled} · Token ${formatNumber(overview.traffic24h.totalTokens)} · 花费 ${formatCost(overview.traffic24h.totalCost)}`}
+              tone={overview.sites.disabled ? 'warning' : 'info'}
+            />
           </div>
 
-          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              style={{ border: '1px solid var(--color-border)' }}
-              onClick={() => window.open(ldohOauthUrl, '_blank', 'noopener,noreferrer')}
-            >
-              授权登录（新窗口）
-            </button>
-            {usingCookieProxy && (
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ border: '1px solid var(--color-border)' }}
-                onClick={() => window.open('/monitor-proxy/ldoh/', '_blank', 'noopener,noreferrer')}
-              >
-                通过代理打开
-              </button>
+          <div className="monitor-quick-links card">
+            <span>快速排查：</span>
+            <Link to="/accounts" className="btn btn-ghost">账号管理</Link>
+            <Link to="/routes" className="btn btn-ghost">智能路由</Link>
+            <Link to="/logs" className="btn btn-ghost">使用日志</Link>
+            <span className="monitor-generated-at">更新时间：{formatTime(overview.generatedAt)}</span>
+          </div>
+
+          <section className="card monitor-section">
+            <div className="monitor-section-header">
+              <h3>异常账号</h3>
+              <span>{overview.accounts.problemItems.length} 个问题</span>
+            </div>
+            {overview.accounts.problemItems.length === 0 ? (
+              <EmptyState>暂无异常账号</EmptyState>
+            ) : (
+              <div className="monitor-table-wrap">
+                <table className="monitor-table">
+                  <thead>
+                    <tr>
+                      <th>账号</th>
+                      <th>站点</th>
+                      <th>状态</th>
+                      <th>原因</th>
+                      <th>检查时间</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {overview.accounts.problemItems.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.username || `#${item.id}`}</td>
+                        <td>{item.siteName}</td>
+                        <td><StatusBadge state={item.runtimeHealth.state} /></td>
+                        <td>{item.runtimeHealth.reason}</td>
+                        <td>{formatTime(item.runtimeHealth.checkedAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </div>
-        </div>
-      )}
+          </section>
 
-      <div className="monitor-frame-shell card">
-        {fallbackHintPresence.shouldRender && (
-          <div className={`monitor-hint panel-presence ${fallbackHintPresence.isVisible ? '' : 'is-closing'}`.trim()}>
-            {fallbackHint}
-          </div>
-        )}
-        <iframe
-          key={`${activeSite.id}-${reloadSeed}-${usingCookieProxy ? 'proxy' : 'direct'}`}
-          src={iframeUrl}
-          title={`monitor-${activeSite.id}`}
-          className="monitor-iframe"
-          onLoad={() => setLoaded(true)}
-        />
-      </div>
+          <section className="card monitor-section">
+            <div className="monitor-section-header">
+              <h3>风险路由</h3>
+              <span>{overview.routes.problemItems.length} 个问题</span>
+            </div>
+            {overview.routes.problemItems.length === 0 ? (
+              <EmptyState>暂无风险路由</EmptyState>
+            ) : (
+              <div className="monitor-table-wrap">
+                <table className="monitor-table">
+                  <thead>
+                    <tr>
+                      <th>路由</th>
+                      <th>模型</th>
+                      <th>通道</th>
+                      <th>冷却/失败</th>
+                      <th>站点</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {overview.routes.problemItems.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.title}</td>
+                        <td>{item.modelPattern}</td>
+                        <td>{item.enabledChannelCount}/{item.channelCount}</td>
+                        <td>{item.cooldownChannelCount}/{item.failedChannelCount}</td>
+                        <td>{item.siteNames.length ? item.siteNames.join('、') : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="card monitor-section">
+            <div className="monitor-section-header">
+              <h3>近期失败请求</h3>
+              <span>{overview.traffic24h.recentFailures.length} 条</span>
+            </div>
+            {overview.traffic24h.recentFailures.length === 0 ? (
+              <EmptyState>暂无近期失败请求</EmptyState>
+            ) : (
+              <div className="monitor-table-wrap">
+                <table className="monitor-table">
+                  <thead>
+                    <tr>
+                      <th>模型</th>
+                      <th>站点/账号</th>
+                      <th>状态码</th>
+                      <th>错误</th>
+                      <th>时间</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {overview.traffic24h.recentFailures.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.modelActual || item.modelRequested || '—'}</td>
+                        <td>{item.siteName || '—'} / {item.accountUsername || '—'}</td>
+                        <td>{item.httpStatus || '—'}</td>
+                        <td>{item.errorMessage || '—'}</td>
+                        <td>{formatTime(item.createdAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </>
+      )}
     </div>
   );
 }
