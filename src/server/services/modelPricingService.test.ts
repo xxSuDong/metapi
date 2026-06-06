@@ -1,12 +1,33 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { fetchMock, withSiteProxyRequestInitMock } = vi.hoisted(() => ({
+  fetchMock: vi.fn(),
+  withSiteProxyRequestInitMock: vi.fn(),
+}));
+
+vi.mock('undici', () => ({
+  fetch: (...args: unknown[]) => fetchMock(...args),
+}));
+
+vi.mock('./siteProxy.js', () => ({
+  withSiteProxyRequestInit: (...args: unknown[]) => withSiteProxyRequestInitMock(...args),
+}));
+
 import {
   calculateModelUsageBreakdown,
   calculateModelUsageCost,
+  estimateProxyCost,
   fallbackTokenCost,
   type PricingModel,
 } from './modelPricingService.js';
 
 describe('modelPricingService', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    withSiteProxyRequestInitMock.mockReset();
+    withSiteProxyRequestInitMock.mockImplementation(async (_url: string, init: Record<string, unknown>) => init);
+  });
+
   it('calculates token-based cost from model ratio and completion ratio', () => {
     const model: PricingModel = {
       modelName: 'gpt-4o',
@@ -182,5 +203,24 @@ describe('modelPricingService', () => {
   it('uses platform-specific fallback token divisor', () => {
     expect(fallbackTokenCost(1500, 'new-api')).toBe(0.003);
     expect(fallbackTokenCost(1500, 'veloera')).toBe(0.0015);
+  });
+
+  it('does not request common pricing metadata from CPA during proxy billing', async () => {
+    const cost = await estimateProxyCost({
+      site: {
+        id: 8317,
+        url: 'https://cpa.example.com',
+        platform: 'cliproxyapi',
+      },
+      account: {
+        id: 42,
+        accessToken: 'sk-cpa',
+      },
+      modelName: 'gpt-4o-mini',
+      totalTokens: 1500,
+    });
+
+    expect(cost).toBe(fallbackTokenCost(1500, 'cliproxyapi'));
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

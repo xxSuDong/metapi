@@ -498,6 +498,10 @@ function syncRoutingReferenceCostCache(
 }
 
 async function fetchPricingData(input: EstimateProxyCostInput): Promise<PricingData | null> {
+  if ((input.site.platform || '').trim().toLowerCase() === 'cliproxyapi') {
+    return null;
+  }
+
   const baseUrl = normalizeUrl(input.site.url);
   const tokenCandidates = buildTokenCandidates(input);
 
