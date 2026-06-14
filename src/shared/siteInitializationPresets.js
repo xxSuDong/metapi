@@ -78,6 +78,12 @@ const DOUBAO_CODING_RECOMMENDED_MODELS = Object.freeze([
   'doubao-seed-2.0-pro',
 ]);
 
+const BAIDU_CODING_PLAN_RECOMMENDED_MODELS = Object.freeze([
+  'ernie-x1-turbo-32k',
+  'ernie-4.5-turbo-32k',
+  'ernie-4.5-turbo-vl-32k',
+]);
+
 const SITE_INITIALIZATION_PRESETS = Object.freeze([
   Object.freeze({
     id: 'codingplan-openai',
@@ -272,6 +278,36 @@ const SITE_INITIALIZATION_PRESETS = Object.freeze([
     docsUrl: 'https://www.volcengine.com/docs/82379/2205646?lang=zh',
     matches(url) {
       return matchesHostAndPaths(url, 'ark.cn-beijing.volces.com', ['/api/coding/v3']);
+    },
+  }),
+  Object.freeze({
+    id: 'baidu-codingplan-openai',
+    label: '百度 CodingPlan / OpenAI',
+    providerLabel: '百度 CodingPlan',
+    description: '适合百度千帆 CodingPlan 的 OpenAI 兼容入口，建议先添加 API Key，再补入常用 ERNIE 编程模型。',
+    platform: 'openai',
+    defaultUrl: 'https://qianfan.baidubce.com/v2/coding',
+    initialSegment: 'apikey',
+    recommendedSkipModelFetch: true,
+    recommendedModels: BAIDU_CODING_PLAN_RECOMMENDED_MODELS,
+    docsUrl: 'https://qianfan.baidubce.com/',
+    matches(url) {
+      return matchesHostAndPaths(url, 'qianfan.baidubce.com', ['/v2/coding']);
+    },
+  }),
+  Object.freeze({
+    id: 'baidu-codingplan-claude',
+    label: '百度 CodingPlan / Claude',
+    providerLabel: '百度 CodingPlan',
+    description: '适合百度千帆 CodingPlan 的 Claude 兼容入口，便于 Claude Code 与同类工具接入。',
+    platform: 'claude',
+    defaultUrl: 'https://qianfan.baidubce.com/anthropic/coding',
+    initialSegment: 'apikey',
+    recommendedSkipModelFetch: true,
+    recommendedModels: BAIDU_CODING_PLAN_RECOMMENDED_MODELS,
+    docsUrl: 'https://qianfan.baidubce.com/',
+    matches(url) {
+      return matchesHostAndPaths(url, 'qianfan.baidubce.com', ['/anthropic/coding']);
     },
   }),
 ]);

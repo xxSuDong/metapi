@@ -40,6 +40,8 @@ const SEMANTIC_PRIMARY_SITE_PATHS = new Set([
   '/apps/anthropic',
   '/api/anthropic',
   '/api/coding/paas/v4',
+  '/v2/coding',
+  '/anthropic/coding',
   '/v1beta/openai',
 ]);
 

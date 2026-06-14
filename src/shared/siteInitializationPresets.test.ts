@@ -23,6 +23,8 @@ describe('siteInitializationPresets', () => {
       'modelscope-openai',
       'modelscope-claude',
       'doubao-coding-openai',
+      'baidu-codingplan-openai',
+      'baidu-codingplan-claude',
     ]));
 
     const openaiPreset = getSiteInitializationPreset('codingplan-openai');
@@ -122,6 +124,26 @@ describe('siteInitializationPresets', () => {
       'doubao-seed-2.0-code',
       'doubao-seed-2.0-pro',
     ]);
+
+    const baiduOpenAiPreset = getSiteInitializationPreset('baidu-codingplan-openai');
+    expect(baiduOpenAiPreset).toMatchObject({
+      id: 'baidu-codingplan-openai',
+      platform: 'openai',
+      defaultUrl: 'https://qianfan.baidubce.com/v2/coding',
+      initialSegment: 'apikey',
+      recommendedSkipModelFetch: true,
+    });
+    expect(baiduOpenAiPreset?.recommendedModels).toEqual(expect.arrayContaining(['ernie-x1-turbo-32k']));
+
+    const baiduClaudePreset = getSiteInitializationPreset('baidu-codingplan-claude');
+    expect(baiduClaudePreset).toMatchObject({
+      id: 'baidu-codingplan-claude',
+      platform: 'claude',
+      defaultUrl: 'https://qianfan.baidubce.com/anthropic/coding',
+      initialSegment: 'apikey',
+      recommendedSkipModelFetch: true,
+    });
+    expect(baiduClaudePreset?.recommendedModels).toEqual(expect.arrayContaining(['ernie-4.5-turbo-32k']));
   });
 
   it('detects Aliyun CodingPlan endpoints by URL', () => {
@@ -188,6 +210,15 @@ describe('siteInitializationPresets', () => {
     expect(detectSiteInitializationPreset('https://ark.cn-beijing.volces.com/api/coding/v3')).toMatchObject({
       id: 'doubao-coding-openai',
       platform: 'openai',
+    });
+
+    expect(detectSiteInitializationPreset('https://qianfan.baidubce.com/v2/coding')).toMatchObject({
+      id: 'baidu-codingplan-openai',
+      platform: 'openai',
+    });
+    expect(detectSiteInitializationPreset('https://qianfan.baidubce.com/anthropic/coding')).toMatchObject({
+      id: 'baidu-codingplan-claude',
+      platform: 'claude',
     });
   });
 

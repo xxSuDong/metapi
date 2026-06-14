@@ -15,6 +15,8 @@ describe('platformIdentity', () => {
 
   it('detects platform by well-known url hints', () => {
     expect(detectPlatformByUrlHint('https://api.openai.com/v1/models')).toBe('openai');
+    expect(detectPlatformByUrlHint('https://qianfan.baidubce.com/v2/coding')).toBe('openai');
+    expect(detectPlatformByUrlHint('https://qianfan.baidubce.com/anthropic/coding')).toBe('claude');
     expect(detectPlatformByUrlHint('https://chatgpt.com/backend-api/codex')).toBe('codex');
     expect(detectPlatformByUrlHint('https://api.anthropic.com/v1/messages')).toBe('claude');
     expect(detectPlatformByUrlHint('https://generativelanguage.googleapis.com/v1beta')).toBe('gemini');

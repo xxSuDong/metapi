@@ -277,6 +277,8 @@ describe('Sites create redirect', () => {
           expect.objectContaining({ label: 'ModelScope / OpenAI' }),
           expect.objectContaining({ label: 'ModelScope / Claude' }),
           expect.objectContaining({ label: '豆包 Coding Plan / OpenAI' }),
+          expect.objectContaining({ label: '百度 CodingPlan / OpenAI' }),
+          expect.objectContaining({ label: '百度 CodingPlan / Claude' }),
         ]),
       );
     } finally {

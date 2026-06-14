@@ -73,6 +73,8 @@ export function detectPlatformByUrlHint(url) {
   const path = parsed?.pathname?.trim().toLowerCase() || '';
 
   if (host === 'api.openai.com') return 'openai';
+  if (host === 'qianfan.baidubce.com' && path.startsWith('/v2/coding')) return 'openai';
+  if (host === 'qianfan.baidubce.com' && path.startsWith('/anthropic/coding')) return 'claude';
   if (host === 'chatgpt.com' && path.startsWith('/backend-api/codex')) return 'codex';
   if (host === 'api.anthropic.com' || (host === 'anthropic.com' && path.startsWith('/v1'))) return 'claude';
   if (
