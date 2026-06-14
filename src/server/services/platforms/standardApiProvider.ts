@@ -22,6 +22,13 @@ export function normalizePlatformBaseUrl(baseUrl: string): string {
 
 export function resolveVersionedModelsUrl(baseUrl: string): string {
   const normalized = normalizePlatformBaseUrl(baseUrl);
+  try {
+    const parsed = new URL(normalized);
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+    if (parsed.hostname === 'qianfan.baidubce.com' && normalizedPath === '/v2/coding') {
+      return `${normalized}/models`;
+    }
+  } catch {}
   if (/\/v\d+(?:\.\d+)?(?:beta)?$/i.test(normalized)) {
     return `${normalized}/models`;
   }

@@ -96,6 +96,28 @@ const ANTIGRAVITY_RUNTIME_USER_AGENT = 'antigravity/1.19.6 darwin/arm64';
 const MINIMAX_HOST_SUFFIXES = ['minimaxi.com', 'minimax.chat'];
 const MINIMAX_MODEL_PATTERN = /(?:^|[-_/])minimax(?:[-_/]|$)|^MiniMax/i;
 
+function getNormalizedSiteUrlHostAndPath(siteUrl?: string): { host: string; path: string } | null {
+  try {
+    const parsed = new URL(asTrimmedString(siteUrl));
+    return {
+      host: parsed.hostname.toLowerCase(),
+      path: parsed.pathname.replace(/\/+$/, '').toLowerCase() || '/',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function hasSemanticOpenAiCodingBasePath(siteUrl?: string): boolean {
+  const parsed = getNormalizedSiteUrlHostAndPath(siteUrl);
+  return parsed?.host === 'qianfan.baidubce.com' && parsed.path === '/v2/coding';
+}
+
+function hasSemanticClaudeCodingBasePath(siteUrl?: string): boolean {
+  const parsed = getNormalizedSiteUrlHostAndPath(siteUrl);
+  return parsed?.host === 'qianfan.baidubce.com' && parsed.path === '/anthropic/coding';
+}
+
 function isMiniMaxOpenAiCompatibleRequest(input: {
   siteUrl?: string;
   sitePlatform: string;
@@ -495,6 +517,11 @@ export function buildUpstreamEndpointRequest(input: {
     }
 
     if (sitePlatform === 'openai') {
+      if (hasSemanticOpenAiCodingBasePath(input.siteUrl)) {
+        if (endpoint === 'messages') return '/messages';
+        if (endpoint === 'responses') return '/responses';
+        return '/chat/completions';
+      }
       if (endpoint === 'messages') return '/v1/messages';
       if (endpoint === 'responses') return '/v1/responses';
       return '/v1/chat/completions';
@@ -511,6 +538,7 @@ export function buildUpstreamEndpointRequest(input: {
     }
 
     if (sitePlatform === 'claude') {
+      if (hasSemanticClaudeCodingBasePath(input.siteUrl)) return '/messages';
       return '/v1/messages';
     }
 
@@ -655,6 +683,7 @@ export function buildUpstreamEndpointRequest(input: {
         oauthProvider: input.oauthProvider,
         oauthProjectId: input.oauthProjectId,
         sitePlatform,
+        siteUrl: input.siteUrl,
         baseHeaders: commonHeaders,
         claudeHeaders,
         body: configuredClaudeBody,
@@ -781,6 +810,7 @@ export function buildClaudeCountTokensUpstreamRequest(input: {
   tokenValue: string;
   oauthProvider?: string;
   sitePlatform?: string;
+  siteUrl?: string;
   claudeBody: Record<string, unknown>;
   downstreamHeaders?: Record<string, unknown>;
 }): {
@@ -827,6 +857,7 @@ export function buildClaudeCountTokensUpstreamRequest(input: {
       tokenValue: input.tokenValue,
       oauthProvider: input.oauthProvider,
       sitePlatform,
+      siteUrl: input.siteUrl,
       baseHeaders: {
         'Content-Type': 'application/json',
       },

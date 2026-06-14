@@ -108,6 +108,42 @@ describe('upstreamRequestBuilder', () => {
     expect(request.body.reasoning_split).toBe(true);
   });
 
+  it('uses Baidu CodingPlan OpenAI paths relative to the semantic base URL', () => {
+    const request = buildUpstreamEndpointRequest({
+      endpoint: 'chat',
+      modelName: 'ernie-x1-turbo-32k',
+      stream: false,
+      tokenValue: 'sk-test',
+      sitePlatform: 'openai',
+      siteUrl: 'https://qianfan.baidubce.com/v2/coding',
+      openaiBody: {
+        model: 'ernie-x1-turbo-32k',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      downstreamFormat: 'openai',
+    });
+
+    expect(request.path).toBe('/chat/completions');
+  });
+
+  it('uses Baidu CodingPlan Claude paths relative to the semantic base URL', () => {
+    const request = buildUpstreamEndpointRequest({
+      endpoint: 'messages',
+      modelName: 'ernie-x1-turbo-32k',
+      stream: false,
+      tokenValue: 'sk-test',
+      sitePlatform: 'claude',
+      siteUrl: 'https://qianfan.baidubce.com/anthropic/coding',
+      openaiBody: {
+        model: 'ernie-x1-turbo-32k',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      downstreamFormat: 'openai',
+    });
+
+    expect(request.path).toBe('/messages');
+  });
+
   it('does not override an explicit MiniMax reasoning_split value', () => {
     const request = buildUpstreamEndpointRequest({
       endpoint: 'chat',
@@ -216,5 +252,52 @@ describe('upstreamRequestBuilder', () => {
 
     expect(request.headers['anthropic-beta']).toContain('header-beta');
     expect(request.headers['anthropic-beta']).toContain('beta-from-body');
+  });
+
+  it('uses Baidu CodingPlan Claude count_tokens path relative to the semantic base URL', () => {
+    const request = buildClaudeCountTokensUpstreamRequest({
+      modelName: 'ernie-x1-turbo-32k',
+      tokenValue: 'sk-test',
+      sitePlatform: 'claude',
+      siteUrl: 'https://qianfan.baidubce.com/anthropic/coding',
+      claudeBody: {
+        model: 'ernie-x1-turbo-32k',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+    });
+
+    expect(request.path).toBe('/messages/count_tokens?beta=true');
+  });
+
+  it('does not apply Baidu semantic path handling to non-Baidu hosts', () => {
+    const openAiRequest = buildUpstreamEndpointRequest({
+      endpoint: 'chat',
+      modelName: 'upstream-gpt',
+      stream: false,
+      tokenValue: 'sk-test',
+      sitePlatform: 'openai',
+      siteUrl: 'https://proxy.example.com/v2/coding',
+      openaiBody: {
+        model: 'upstream-gpt',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      downstreamFormat: 'openai',
+    });
+    const claudeRequest = buildUpstreamEndpointRequest({
+      endpoint: 'messages',
+      modelName: 'claude-test',
+      stream: false,
+      tokenValue: 'sk-test',
+      sitePlatform: 'claude',
+      siteUrl: 'https://proxy.example.com/anthropic/coding',
+      openaiBody: {
+        model: 'claude-test',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      downstreamFormat: 'openai',
+    });
+
+    expect(openAiRequest.path).toBe('/v1/chat/completions');
+    expect(claudeRequest.path).toBe('/v1/messages');
   });
 });

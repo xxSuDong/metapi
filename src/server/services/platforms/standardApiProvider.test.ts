@@ -32,6 +32,7 @@ describe('standardApiProvider helpers', () => {
     expect(resolveVersionedModelsUrl('https://api.example.com')).toBe('https://api.example.com/v1/models');
     expect(resolveVersionedModelsUrl('https://api.example.com/v1')).toBe('https://api.example.com/v1/models');
     expect(resolveVersionedModelsUrl('https://api.example.com/v1beta')).toBe('https://api.example.com/v1beta/models');
+    expect(resolveVersionedModelsUrl('https://qianfan.baidubce.com/v2/coding')).toBe('https://qianfan.baidubce.com/v2/coding/models');
   });
 
   it('provides shared unsupported login/checkin and zero-balance defaults', async () => {

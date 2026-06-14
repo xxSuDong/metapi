@@ -4,6 +4,15 @@ const CLAUDE_DEFAULT_ANTHROPIC_VERSION = '2023-06-01';
 
 function resolveOpenAiCompatibleBaseUrl(baseUrl: string): string | null {
   const normalized = (baseUrl || '').trim().replace(/\/+$/, '');
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.hostname === 'qianfan.baidubce.com' && parsed.pathname.replace(/\/+$/, '') === '/anthropic/coding') {
+      parsed.pathname = '/v2/coding';
+      parsed.search = '';
+      parsed.hash = '';
+      return parsed.toString().replace(/\/+$/, '');
+    }
+  } catch {}
   const match = normalized.match(/^(.*)\/anthropic$/i);
   return match?.[1] || null;
 }

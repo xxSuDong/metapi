@@ -37,6 +37,12 @@ describe('ClaudeAdapter', () => {
     });
   }
 
+  class TestClaudeAdapter extends ClaudeAdapter {
+    protected override async fetchJson<T>(url: string, options?: Parameters<ClaudeAdapter['fetchJson']>[1]): Promise<T> {
+      return super.fetchJson(url.replace('qianfan.baidubce.com', '127.0.0.1'), options);
+    }
+  }
+
   it('reads models from the configured Claude models endpoint', async () => {
     await startServer((req, res) => {
       if (req.url === '/anthropic/v1/models') {
@@ -79,6 +85,29 @@ describe('ClaudeAdapter', () => {
     expect(requests[0].headers['x-api-key']).toBe('tp-test');
     expect(requests[1].headers.authorization).toBe('Bearer tp-test');
     expect(requests[1].headers['x-api-key']).toBeUndefined();
+  });
+
+  it('falls back from Baidu /anthropic/coding to /v2/coding models endpoint', async () => {
+    await startServer((req, res) => {
+      if (req.url === '/anthropic/coding/v1/models') {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'not found' }));
+        return;
+      }
+      if (req.url === '/v2/coding/models') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ data: [{ id: 'ernie-x1-turbo-32k' }, { id: 'ernie-4.5-turbo-32k' }] }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+
+    const adapter = new TestClaudeAdapter();
+    const qianfanClaudeBaseUrl = `${baseUrl}/anthropic/coding`.replace('127.0.0.1', 'qianfan.baidubce.com');
+    const models = await adapter.getModels(qianfanClaudeBaseUrl, 'tp-test');
+
+    expect(models).toEqual(['ernie-x1-turbo-32k', 'ernie-4.5-turbo-32k']);
+    expect(requests.map((request) => request.url)).toEqual(['/anthropic/coding/v1/models', '/v2/coding/models']);
   });
 
   it('does not fall back for non-anthropic base urls', async () => {

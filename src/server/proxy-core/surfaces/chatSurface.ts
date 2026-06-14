@@ -1307,12 +1307,13 @@ export async function handleClaudeCountTokensSurfaceRequest(
     }
     const channelLease = leaseResult.lease;
 
-    const buildRequest = () => {
+    const buildRequest = (siteUrl?: string) => {
       const upstreamRequest = buildClaudeCountTokensUpstreamRequest({
         modelName,
         tokenValue: selected.tokenValue,
         oauthProvider: oauth?.provider,
         sitePlatform: selected.site.platform,
+        siteUrl,
         claudeBody: rawBody,
         downstreamHeaders: request.headers as Record<string, unknown>,
       });
@@ -1327,7 +1328,7 @@ export async function handleClaudeCountTokensSurfaceRequest(
 
     try {
       const countTokensResult = await runWithSiteApiEndpointPool(selected.site, async (target) => {
-        let upstreamRequest = buildRequest();
+        let upstreamRequest = buildRequest(target.baseUrl);
         const dispatchRequest = createSurfaceDispatchRequest({
           site: selected.site,
           siteUrl: target.baseUrl,
@@ -1346,12 +1347,12 @@ export async function handleClaudeCountTokensSurfaceRequest(
             ctx: recoverContext,
             selected,
             siteUrl: target.baseUrl,
-            buildRequest: () => buildRequest(),
+            buildRequest: () => buildRequest(target.baseUrl),
             dispatchRequest,
             captureFailureBody: false,
           });
           if (recovered?.upstream?.ok) {
-            upstreamRequest = buildRequest();
+            upstreamRequest = buildRequest(target.baseUrl);
             upstream = recovered.upstream;
             recoverApplied = true;
           } else {

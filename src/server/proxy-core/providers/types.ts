@@ -37,6 +37,7 @@ export type PrepareProviderRequestInput = {
   oauthProvider?: string;
   oauthProjectId?: string;
   sitePlatform?: string;
+  siteUrl?: string;
   baseHeaders: Record<string, string>;
   providerHeaders?: Record<string, string>;
   claudeHeaders?: Record<string, string>;
