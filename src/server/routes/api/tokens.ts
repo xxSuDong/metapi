@@ -1358,7 +1358,7 @@ export async function tokensRoutes(app: FastifyInstance) {
       .all())
       .some((channel) =>
         channel.accountId === body.accountId
-        && (channel.tokenId ?? null) === (body.tokenId ?? null)
+        && (channel.tokenId ?? null) === (effectiveTokenId ?? null)
         && (channel.sourceModel || '').trim().toLowerCase() === sourceModel.toLowerCase(),
       );
     if (duplicate) {
@@ -1368,7 +1368,7 @@ export async function tokensRoutes(app: FastifyInstance) {
     const insertedChannel = await db.insert(schema.routeChannels).values({
       routeId,
       accountId: body.accountId,
-      tokenId: body.tokenId,
+      tokenId: effectiveTokenId,
       sourceModel: sourceModel || null,
       priority: body.priority ?? 0,
       weight: body.weight ?? 10,

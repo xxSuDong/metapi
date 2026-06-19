@@ -1542,10 +1542,34 @@ export async function rebuildTokenRoutesFromAvailability() {
         }
       }
 
+      const desiredKeys = new Set<string>();
+      const desiredSourceModelsByKey = new Map<string, Set<string>>();
+      for (const candidate of desiredCandidates.values()) {
+        const candidateKey = buildCandidateKey(candidate);
+        desiredKeys.add(candidateKey);
+        const normalizedSourceModel = candidate.sourceModel.trim().toLowerCase();
+        if (!desiredSourceModelsByKey.has(candidateKey)) desiredSourceModelsByKey.set(candidateKey, new Set());
+        desiredSourceModelsByKey.get(candidateKey)!.add(normalizedSourceModel);
+      }
+
+      for (const channel of routeChannels) {
+        if (channel.manualOverride) continue;
+        const channelKey = buildChannelKey(channel);
+        const normalizedSourceModel = (channel.sourceModel || '').trim().toLowerCase();
+        const sourceModels = desiredSourceModelsByKey.get(channelKey);
+        if (desiredKeys.has(channelKey) && sourceModels?.has(normalizedSourceModel)) continue;
+        await db.delete(schema.routeChannels).where(eq(schema.routeChannels.id, channel.id)).run();
+        const index = channels.findIndex((item) => item.id === channel.id);
+        if (index >= 0) channels.splice(index, 1);
+        const routeIndex = routeChannels.findIndex((item) => item.id === channel.id);
+        if (routeIndex >= 0) routeChannels.splice(routeIndex, 1);
+        removedChannels++;
+      }
+
       for (const candidate of desiredCandidates.values()) {
         const exists = routeChannels.some((channel) => (
           buildChannelKey(channel) === buildCandidateKey(candidate)
-          && (channel.sourceModel || '').trim() === candidate.sourceModel
+          && (channel.sourceModel || '').trim().toLowerCase() === candidate.sourceModel.trim().toLowerCase()
         ));
         if (exists) continue;
 

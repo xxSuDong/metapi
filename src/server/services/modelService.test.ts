@@ -331,6 +331,87 @@ describe('rebuildTokenRoutesFromAvailability', () => {
     expect(wildcardChannels.some((channel) => channel.accountId === secondAccount.id)).toBe(true);
   });
 
+  it('prunes stale automatic wildcard channels and matches sourceModel case-insensitively', async () => {
+    const site = await db.insert(schema.sites).values({
+      name: 'wildcard-prune-site',
+      url: 'https://wildcard-prune.example.com',
+      platform: 'new-api',
+    }).returning().get();
+
+    const account = await db.insert(schema.accounts).values({
+      siteId: site.id,
+      username: 'wildcard-prune-user',
+      accessToken: 'access-prune',
+      status: 'active',
+    }).returning().get();
+
+    const token = await db.insert(schema.accountTokens).values({
+      accountId: account.id,
+      name: 'default-prune',
+      token: 'sk-prune',
+      source: 'manual',
+      enabled: true,
+      isDefault: true,
+    }).returning().get();
+
+    await db.insert(schema.tokenModelAvailability).values({
+      tokenId: token.id,
+      modelName: 'claude-opus-4-5',
+      available: true,
+    }).run();
+
+    const wildcardRoute = await db.insert(schema.tokenRoutes).values({
+      modelPattern: 'claude-*',
+      enabled: true,
+    }).returning().get();
+
+    await db.insert(schema.routeChannels).values([
+      {
+        routeId: wildcardRoute.id,
+        accountId: account.id,
+        tokenId: token.id,
+        sourceModel: 'Claude-Opus-4-5',
+        priority: 0,
+        weight: 10,
+        enabled: true,
+        manualOverride: false,
+      },
+      {
+        routeId: wildcardRoute.id,
+        accountId: account.id,
+        tokenId: token.id,
+        sourceModel: 'claude-old',
+        priority: 0,
+        weight: 10,
+        enabled: true,
+        manualOverride: false,
+      },
+      {
+        routeId: wildcardRoute.id,
+        accountId: account.id,
+        tokenId: token.id,
+        sourceModel: 'claude-manual',
+        priority: 0,
+        weight: 10,
+        enabled: true,
+        manualOverride: true,
+      },
+    ]).run();
+
+    const rebuild = await rebuildTokenRoutesFromAvailability();
+
+    expect(rebuild.removedChannels).toBe(1);
+
+    const wildcardChannels = await db.select().from(schema.routeChannels)
+      .where(eq(schema.routeChannels.routeId, wildcardRoute.id))
+      .all();
+
+    expect(wildcardChannels.map((channel) => channel.sourceModel).sort()).toEqual([
+      'Claude-Opus-4-5',
+      'claude-manual',
+    ]);
+  });
+
   it('removes stale exact routes and keeps wildcard routes on rebuild', async () => {
     const site = await db.insert(schema.sites).values({
       name: 'site-1',

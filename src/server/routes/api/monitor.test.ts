@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, mkdtempSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { eq } from 'drizzle-orm';
 
@@ -178,6 +178,8 @@ describe('monitor routes', () => {
   it('detects enabled routes with no usable channels', async () => {
     const disabledSiteId = await insertSite({ name: 'Disabled Route Site', status: 'disabled' });
     const disabledAccountId = await insertAccount(disabledSiteId, { username: 'disabled-route-account' });
+    const activeSiteId = await insertSite({ name: 'Active Route Site' });
+    const expiredAccountId = await insertAccount(activeSiteId, { username: 'expired-route-account', status: 'expired' });
     await db.insert(schema.tokenRoutes).values({
       modelPattern: 'gpt-risky',
       displayName: 'Risky GPT',
@@ -193,15 +195,33 @@ describe('monitor routes', () => {
       enabled: false,
       failCount: 3,
     }).run();
+    const routeWithDisabledSiteChannelId = insertedId(await db.insert(schema.tokenRoutes).values({
+      modelPattern: 'gpt-disabled-site-channel',
+      enabled: true,
+    }).run());
+    await db.insert(schema.routeChannels).values({
+      routeId: routeWithDisabledSiteChannelId,
+      accountId: disabledAccountId,
+      enabled: true,
+    }).run();
+    const routeWithExpiredAccountChannelId = insertedId(await db.insert(schema.tokenRoutes).values({
+      modelPattern: 'gpt-expired-account-channel',
+      enabled: true,
+    }).run());
+    await db.insert(schema.routeChannels).values({
+      routeId: routeWithExpiredAccountChannelId,
+      accountId: expiredAccountId,
+      enabled: true,
+    }).run();
 
     const response = await app.inject({ method: 'GET', url: '/api/monitor/overview?refresh=1' });
 
     expect(response.statusCode).toBe(200);
     expect(response.json().routes).toMatchObject({
-      total: 2,
-      enabled: 2,
+      total: 4,
+      enabled: 4,
       disabled: 0,
-      zeroEnabledChannels: 2,
+      zeroEnabledChannels: 4,
     });
     expect(response.json().routes.problemItems).toEqual(
       expect.arrayContaining([
@@ -216,8 +236,25 @@ describe('monitor routes', () => {
           enabledChannelCount: 0,
           failedChannelCount: 1,
         }),
+        expect.objectContaining({
+          modelPattern: 'gpt-disabled-site-channel',
+          channelCount: 1,
+          enabledChannelCount: 0,
+        }),
+        expect.objectContaining({
+          modelPattern: 'gpt-expired-account-channel',
+          channelCount: 1,
+          enabledChannelCount: 0,
+        }),
       ]),
     );
+  });
+
+  it('queries only recent proxy logs for the overview traffic window', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/server/routes/api/monitor.ts'), 'utf8');
+
+    expect(source).toContain('gte(schema.proxyLogs.createdAt, recentLogCutoffIso)');
+    expect(source).not.toContain('db.select().from(schema.proxyLogs).all()');
   });
 
   it('summarizes recent 24h proxy traffic and ignores older failures', async () => {

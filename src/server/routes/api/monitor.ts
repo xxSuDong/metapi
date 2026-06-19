@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { db, schema } from '../../db/index.js';
 import { upsertSetting } from '../../db/upsertSetting.js';
 import { config } from '../../config.js';
-import { eq } from 'drizzle-orm';
+import { gte, eq } from 'drizzle-orm';
 import { createRateLimitGuard } from '../../middleware/requestRateLimit.js';
 import { parseMonitorConfigPayload } from '../../contracts/supportRoutePayloads.js';
 import { getAccountsSnapshot } from '../../services/accountsOverviewService.js';
@@ -156,11 +156,12 @@ function isCooldownActive(value: string | null | undefined, nowMs: number): bool
 async function buildMonitorOverview(refresh: boolean) {
   const now = new Date();
   const nowMs = now.getTime();
+  const recentLogCutoffIso = new Date(nowMs - 24 * 60 * 60 * 1000).toISOString();
   const [accountsSnapshot, routes, channels, proxyLogs] = await Promise.all([
     getAccountsSnapshot({ forceRefresh: refresh }),
     db.select().from(schema.tokenRoutes).all(),
     db.select().from(schema.routeChannels).all(),
-    db.select().from(schema.proxyLogs).all(),
+    db.select().from(schema.proxyLogs).where(gte(schema.proxyLogs.createdAt, recentLogCutoffIso)).all(),
   ]);
   const { accounts, sites } = accountsSnapshot.payload;
 
@@ -238,7 +239,13 @@ async function buildMonitorOverview(refresh: boolean) {
   for (const route of routes) {
     if (route.enabled) enabledRoutes += 1;
     const routeChannels = channelsByRouteId.get(route.id) || [];
-    const enabledChannelCount = routeChannels.filter((channel) => channel.enabled !== false).length;
+    const enabledChannelCount = routeChannels.filter((channel) => {
+      if (channel.enabled === false) return false;
+      const account = accountById.get(channel.accountId);
+      if (!account || account.status === 'disabled' || account.status === 'expired') return false;
+      const site = account.site || siteById.get(account.siteId);
+      return site?.status !== 'disabled';
+    }).length;
     const routeCooldownCount = routeChannels.filter((channel) => isCooldownActive(channel.cooldownUntil, nowMs)).length;
     const failedChannelCount = routeChannels.filter((channel) => Number(channel.failCount || 0) > 0 || Number(channel.consecutiveFailCount || 0) > 0).length;
     cooldownChannels += routeCooldownCount;

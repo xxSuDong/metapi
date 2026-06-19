@@ -154,6 +154,55 @@ describe('proxyUsageFallbackService', () => {
     expect(matched).toBeNull();
   });
 
+  it('rejects non-sub2api self-log matches with very different latency by default', () => {
+    const logs: SelfLogItem[] = [
+      {
+        modelName: 'gpt-4o',
+        tokenName: 'default',
+        promptTokens: 120,
+        completionTokens: 80,
+        totalTokens: 200,
+        quota: 3300,
+        createdAtMs: 1_700_000_010_000,
+        requestTimeMs: 118_000,
+      },
+    ];
+
+    const matched = findBestSelfLogMatch(logs, {
+      modelName: 'gpt-4o',
+      requestStartedAtMs: 1_700_000_000_000,
+      requestEndedAtMs: 1_700_000_011_000,
+      localLatencyMs: 2_000,
+    });
+
+    expect(matched).toBeNull();
+  });
+
+  it('allows sub2api callers to widen self-log latency matching explicitly', () => {
+    const logs: SelfLogItem[] = [
+      {
+        modelName: 'gpt-4o',
+        tokenName: 'default',
+        promptTokens: 120,
+        completionTokens: 80,
+        totalTokens: 200,
+        quota: 3300,
+        createdAtMs: 1_700_000_010_000,
+        requestTimeMs: 118_000,
+      },
+    ];
+
+    const matched = findBestSelfLogMatch(logs, {
+      modelName: 'gpt-4o',
+      requestStartedAtMs: 1_700_000_000_000,
+      requestEndedAtMs: 1_700_000_011_000,
+      localLatencyMs: 2_000,
+      maxLatencyDeltaMs: 120_000,
+    });
+
+    expect(matched).toEqual(logs[0]);
+  });
+
   it('matches provider-prefixed model names', () => {
     const logs: SelfLogItem[] = [
       {

@@ -644,6 +644,43 @@ describe('PUT /api/routes/:id route rebuild', () => {
     });
   });
 
+  it('uses the account default token when adding a route channel without tokenId', async () => {
+    const seeded = await seedAccountWithToken('gpt-4o-mini');
+    const route = await db.insert(schema.tokenRoutes).values({
+      modelPattern: 'gpt-4o-mini',
+      enabled: true,
+    }).returning().get();
+
+    const createdResponse = await app.inject({
+      method: 'POST',
+      url: `/api/routes/${route.id}/channels`,
+      payload: {
+        accountId: seeded.account.id,
+      },
+    });
+
+    expect(createdResponse.statusCode).toBe(200);
+    expect(createdResponse.json()).toMatchObject({
+      accountId: seeded.account.id,
+      tokenId: seeded.token.id,
+      sourceModel: 'gpt-4o-mini',
+    });
+
+    const duplicateResponse = await app.inject({
+      method: 'POST',
+      url: `/api/routes/${route.id}/channels`,
+      payload: {
+        accountId: seeded.account.id,
+      },
+    });
+
+    expect(duplicateResponse.statusCode).toBe(400);
+    expect(duplicateResponse.json()).toMatchObject({
+      success: false,
+      message: '该来源模型的通道已存在',
+    });
+  });
+
   it('accepts null tokenId when updating a channel and falls back to the account default token', async () => {
     const seeded = await seedAccountWithToken('gpt-4o-mini');
     const alternateToken = await db.insert(schema.accountTokens).values({
