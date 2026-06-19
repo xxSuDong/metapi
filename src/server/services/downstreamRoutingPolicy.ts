@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { getProxyAuthContext } from '../../middleware/auth.js';
-import { isModelAllowedByPolicyOrAllowedRoutes, recordManagedKeyCostUsage } from '../../services/downstreamApiKeyService.js';
-import { EMPTY_DOWNSTREAM_ROUTING_POLICY, type DownstreamRoutingPolicy } from '../../services/downstreamPolicyTypes.js';
+import { getProxyAuthContext } from '../middleware/auth.js';
+import { isModelAllowedByPolicyOrAllowedRoutes, recordManagedKeyCostUsage } from './downstreamApiKeyService.js';
+import { EMPTY_DOWNSTREAM_ROUTING_POLICY, type DownstreamRoutingPolicy } from './downstreamPolicyTypes.js';
 
 export function getDownstreamRoutingPolicy(request: FastifyRequest): DownstreamRoutingPolicy {
   const authContext = getProxyAuthContext(request);

@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { listModelsSurface } from '../../proxy-core/surfaces/modelsSurface.js';
 import * as routeRefreshWorkflow from '../../services/routeRefreshWorkflow.js';
-import { getDownstreamRoutingPolicy } from './downstreamPolicy.js';
+import { getDownstreamRoutingPolicy } from '../../services/downstreamRoutingPolicy.js';
 import { tokenRouter } from '../../services/tokenRouter.js';
 import { isModelAllowedByPolicyOrAllowedRoutes } from '../../services/downstreamApiKeyService.js';
 
