@@ -1439,6 +1439,10 @@ export async function rebuildTokenRoutesFromAvailability() {
     addModelCandidate(row.model_availability.modelName, row.accounts.id, null, row.accounts.siteId);
   }
 
+  const sourceRouteReferenceRows = await db.select({ sourceRouteId: schema.routeGroupSources.sourceRouteId })
+    .from(schema.routeGroupSources)
+    .all();
+  const explicitGroupSourceRouteIds = new Set(sourceRouteReferenceRows.map((row) => row.sourceRouteId));
   const routes = await db.select().from(schema.tokenRoutes).all();
   const channels = await db.select().from(schema.routeChannels).all();
 
@@ -1567,6 +1571,9 @@ export async function rebuildTokenRoutesFromAvailability() {
       continue;
     }
     if (latestModelNames.has(modelPattern)) {
+      continue;
+    }
+    if (explicitGroupSourceRouteIds.has(route.id)) {
       continue;
     }
 

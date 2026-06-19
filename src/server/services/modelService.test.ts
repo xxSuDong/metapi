@@ -411,4 +411,68 @@ describe('rebuildTokenRoutesFromAvailability', () => {
     const wildcardRouteAfter = await db.select().from(schema.tokenRoutes).where(eq(schema.tokenRoutes.id, wildcardRoute.id)).get();
     expect(wildcardRouteAfter).toBeDefined();
   });
+
+  it('keeps stale exact routes that are still referenced by explicit groups', async () => {
+    const site = await db.insert(schema.sites).values({
+      name: 'site-1',
+      url: 'https://site-1.example.com',
+      platform: 'new-api',
+    }).returning().get();
+
+    const account = await db.insert(schema.accounts).values({
+      siteId: site.id,
+      username: 'user-1',
+      accessToken: 'access-1',
+      status: 'active',
+    }).returning().get();
+
+    const token = await db.insert(schema.accountTokens).values({
+      accountId: account.id,
+      name: 'default',
+      token: 'sk-test',
+      source: 'manual',
+      enabled: true,
+      isDefault: true,
+    }).returning().get();
+
+    await db.insert(schema.tokenModelAvailability).values({
+      tokenId: token.id,
+      modelName: 'latest-model',
+      available: true,
+    }).run();
+
+    const sourceRoute = await db.insert(schema.tokenRoutes).values({
+      modelPattern: 'old-model',
+      enabled: true,
+    }).returning().get();
+
+    const groupRoute = await db.insert(schema.tokenRoutes).values({
+      modelPattern: 'merged-model',
+      displayName: 'merged-model',
+      routeMode: 'explicit_group',
+      enabled: true,
+    }).returning().get();
+
+    await db.insert(schema.routeGroupSources).values({
+      groupRouteId: groupRoute.id,
+      sourceRouteId: sourceRoute.id,
+    }).run();
+
+    const rebuild = await rebuildTokenRoutesFromAvailability();
+
+    expect(rebuild.removedRoutes).toBe(0);
+
+    const sourceRouteAfter = await db.select().from(schema.tokenRoutes)
+      .where(eq(schema.tokenRoutes.id, sourceRoute.id))
+      .get();
+    expect(sourceRouteAfter).toBeDefined();
+
+    const groupSourceAfter = await db.select().from(schema.routeGroupSources)
+      .where(eq(schema.routeGroupSources.groupRouteId, groupRoute.id))
+      .get();
+    expect(groupSourceAfter).toMatchObject({
+      groupRouteId: groupRoute.id,
+      sourceRouteId: sourceRoute.id,
+    });
+  });
 });
