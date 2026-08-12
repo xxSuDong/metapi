@@ -1,0 +1,18 @@
+services:
+  metapi:
+    image: xxsudong/metapi:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: metapi-xxsudong
+    ports:
+      - "4004:4000"
+    volumes:
+      - ./docker/data:/app/data
+    env_file:
+      - ./docker/.env
+    environment:
+      PORT: 4000
+      DATA_DIR: /app/data
+      TZ: Asia/Shanghai
+    restart: unless-stopped

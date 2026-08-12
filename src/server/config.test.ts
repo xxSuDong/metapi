@@ -66,9 +66,30 @@ describe('buildConfig', () => {
     expect(config.codexResponsesWebsocketBeta).toBe('responses_websockets=2099-01-01');
   });
 
-  it('accepts JSON request bodies larger than Fastify default 1 MiB', async () => {
+  it('uses a larger default request body limit for long Codex payloads', () => {
+    const config = buildConfig({});
+    const fastifyOptions = buildFastifyOptions(config);
+
+    expect(config.requestBodyLimit).toBe(100 * 1024 * 1024);
+    expect(fastifyOptions.bodyLimit).toBe(100 * 1024 * 1024);
+  });
+
+  it('allows request body limit overrides from environment', () => {
+    const config = buildConfig({
+      REQUEST_BODY_LIMIT_MB: '128',
+    });
+    const bytesConfig = buildConfig({
+      REQUEST_BODY_LIMIT_BYTES: String(150 * 1024 * 1024),
+      REQUEST_BODY_LIMIT_MB: '128',
+    });
+
+    expect(config.requestBodyLimit).toBe(128 * 1024 * 1024);
+    expect(bytesConfig.requestBodyLimit).toBe(150 * 1024 * 1024);
+  });
+
+  it('accepts long Codex-sized JSON request bodies', async () => {
     const app = Fastify(buildFastifyOptions(buildConfig({})));
-    const largeText = 'a'.repeat(2 * 1024 * 1024);
+    const largeText = 'a'.repeat(21 * 1024 * 1024);
 
     app.post('/echo', async (request) => {
       const body = request.body as { text?: string };

@@ -2,7 +2,8 @@ import 'dotenv/config';
 import type { FastifyServerOptions } from 'fastify';
 import { normalizePayloadRulesConfig } from './services/payloadRules.js';
 
-const DEFAULT_REQUEST_BODY_LIMIT = 20 * 1024 * 1024;
+const DEFAULT_REQUEST_BODY_LIMIT = 100 * 1024 * 1024;
+const MIN_REQUEST_BODY_LIMIT = 1024 * 1024;
 const DEFAULT_CODEX_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 const DEFAULT_CLAUDE_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
 const DEFAULT_GEMINI_CLI_CLIENT_ID = '681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com';
@@ -20,6 +21,20 @@ function parseNumber(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return parsed;
+}
+
+function parseRequestBodyLimit(env: NodeJS.ProcessEnv): number {
+  const bytes = parseNumber(env.REQUEST_BODY_LIMIT_BYTES, NaN);
+  if (Number.isFinite(bytes) && bytes > 0) {
+    return Math.max(MIN_REQUEST_BODY_LIMIT, Math.trunc(bytes));
+  }
+
+  const megabytes = parseNumber(env.REQUEST_BODY_LIMIT_MB, NaN);
+  if (Number.isFinite(megabytes) && megabytes > 0) {
+    return Math.max(MIN_REQUEST_BODY_LIMIT, Math.trunc(megabytes * 1024 * 1024));
+  }
+
+  return DEFAULT_REQUEST_BODY_LIMIT;
 }
 
 function parseCsvList(value: string | undefined): string[] {
@@ -116,7 +131,7 @@ export function buildConfig(env: NodeJS.ProcessEnv) {
     dbType: parseDbType(env.DB_TYPE),
     dbUrl: (env.DB_URL || '').trim(),
     dbSsl: parseBoolean(env.DB_SSL, false),
-    requestBodyLimit: DEFAULT_REQUEST_BODY_LIMIT,
+    requestBodyLimit: parseRequestBodyLimit(env),
     routingFallbackUnitCost: Math.max(1e-6, parseNumber(env.ROUTING_FALLBACK_UNIT_COST, 1)),
     proxyFirstByteTimeoutSec: Math.max(0, Math.trunc(parseNumber(env.PROXY_FIRST_BYTE_TIMEOUT_SEC, 0))),
     tokenRouterFailureCooldownMaxSec: normalizeTokenRouterFailureCooldownMaxSec(

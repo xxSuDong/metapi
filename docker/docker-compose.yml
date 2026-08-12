@@ -11,6 +11,7 @@ services:
       CHECKIN_CRON: "0 8 * * *"
       BALANCE_REFRESH_CRON: "0 * * * *"
       PORT: ${PORT:-4000}
+      REQUEST_BODY_LIMIT_MB: ${REQUEST_BODY_LIMIT_MB:-100}
       DATA_DIR: /app/data
       TZ: ${TZ:-Asia/Shanghai}
     restart: unless-stopped
