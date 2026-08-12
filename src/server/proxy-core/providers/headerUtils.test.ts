@@ -93,6 +93,61 @@ describe('provider header utils', () => {
     expect(headers['User-Agent']).toContain('codex_cli_rs/0.137.0');
   });
 
+  it('normalizes generic SDK identities before proxying Codex upstream requests', async () => {
+    const { buildCodexRuntimeHeaders } = await import('./headerUtils.js');
+
+    const headers = buildCodexRuntimeHeaders({
+      baseHeaders: {
+        authorization: 'Bearer test',
+        'user-agent': 'OpenAI/Python 2.24.0',
+      },
+      providerHeaders: {
+        Originator: 'OpenClaw',
+      },
+      stream: true,
+      continuityKey: 'cache-key-1',
+      explicitSessionId: null,
+    });
+
+    expect(headers.Originator).toBe('codex_cli_rs');
+    expect(headers['User-Agent']).toContain('codex_cli_rs/0.137.0');
+    expect(headers['User-Agent']).not.toContain('OpenAI/Python');
+  });
+
+  it('preserves official Codex user agents when they are supplied downstream', async () => {
+    const { buildCodexRuntimeHeaders } = await import('./headerUtils.js');
+
+    const headers = buildCodexRuntimeHeaders({
+      baseHeaders: {
+        authorization: 'Bearer test',
+        'user-agent': 'Mozilla/5.0 codex_chatgpt_desktop/1.2.3',
+      },
+      stream: true,
+      continuityKey: 'cache-key-1',
+      explicitSessionId: null,
+    });
+
+    expect(headers.Originator).toBe('codex_chatgpt_desktop');
+    expect(headers['User-Agent']).toBe('Mozilla/5.0 codex_chatgpt_desktop/1.2.3');
+  });
+
+  it('ignores non-official configured Codex user-agent overrides', async () => {
+    const { buildCodexRuntimeHeaders } = await import('./headerUtils.js');
+
+    const headers = buildCodexRuntimeHeaders({
+      baseHeaders: {
+        authorization: 'Bearer test',
+      },
+      stream: true,
+      continuityKey: 'cache-key-1',
+      explicitSessionId: null,
+      userAgentOverride: 'CodexClient/1.0',
+    });
+
+    expect(headers['User-Agent']).toContain('codex_cli_rs/0.137.0');
+    expect(headers['User-Agent']).not.toContain('CodexClient/1.0');
+  });
+
   it('builds claude runtime headers with merged betas and oauth bearer auth', async () => {
     const { buildClaudeRuntimeHeaders } = await import('./headerUtils.js');
 

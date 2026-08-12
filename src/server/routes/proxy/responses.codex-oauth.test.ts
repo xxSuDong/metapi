@@ -295,7 +295,7 @@ describe('responses proxy codex oauth refresh', () => {
     expect(secondOptions.headers.Version || secondOptions.headers.version).toBe('0.137.0');
     expect(String(secondOptions.headers.Session_id || secondOptions.headers.session_id || '')).toMatch(/^[0-9a-f-]{36}$/i);
     expect(secondOptions.headers.Conversation_id || secondOptions.headers.conversation_id).toBeUndefined();
-    expect(secondOptions.headers['User-Agent'] || secondOptions.headers['user-agent']).toBe('CodexClient/1.0');
+    expect(secondOptions.headers['User-Agent'] || secondOptions.headers['user-agent']).toContain('codex_cli_rs/0.137.0');
     expect(secondOptions.headers.Accept || secondOptions.headers.accept).toBe('text/event-stream');
     expect(secondOptions.headers.Connection || secondOptions.headers.connection).toBe('Keep-Alive');
     expect(response.json()?.output_text).toContain('ok after codex token refresh');
@@ -1085,7 +1085,7 @@ describe('responses proxy codex oauth refresh', () => {
         'x-openai-client-user-agent': '{"client":"openclaw"}',
         origin: 'https://openclaw.example',
         referer: 'https://openclaw.example/app',
-        'user-agent': 'OpenClaw/1.0',
+        'user-agent': 'OpenAI/Python 2.24.0',
         version: '0.202.0',
         session_id: 'session-from-client',
       },
@@ -1101,7 +1101,7 @@ describe('responses proxy codex oauth refresh', () => {
     const [, options] = fetchMock.mock.calls[0] as [string, any];
     expect(options.headers.Version || options.headers.version).toBe('0.202.0');
     expect(options.headers.Session_id || options.headers.session_id).toBe('session-from-client');
-    expect(options.headers['User-Agent'] || options.headers['user-agent']).toBe('OpenClaw/1.0');
+    expect(options.headers['User-Agent'] || options.headers['user-agent']).toContain('codex_cli_rs/0.137.0');
     expect(options.headers['openai-beta']).toBeUndefined();
     expect(options.headers['x-openai-client-user-agent']).toBeUndefined();
     expect(options.headers.origin).toBeUndefined();

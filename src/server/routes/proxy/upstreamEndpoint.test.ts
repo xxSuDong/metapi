@@ -869,7 +869,7 @@ describe('buildUpstreamEndpointRequest', () => {
     expect(request.headers['x-test-header']).toBeUndefined();
   });
 
-  it('preserves codex compatibility headers while stripping browser and ip passthrough headers', () => {
+  it('normalizes generic client identity headers while stripping browser and ip passthrough headers for Codex', () => {
     const request = buildUpstreamEndpointRequest({
       endpoint: 'responses',
       modelName: 'gpt-5.2-codex',
@@ -884,7 +884,7 @@ describe('buildUpstreamEndpointRequest', () => {
       },
       downstreamFormat: 'openai',
       downstreamHeaders: {
-        'user-agent': 'OpenClaw/1.0',
+        'user-agent': 'OpenAI/Python 2.24.0',
         version: '0.202.0',
         session_id: 'session-from-client',
         'x-responsesapi-include-timing-metrics': '1',
@@ -900,7 +900,7 @@ describe('buildUpstreamEndpointRequest', () => {
 
     expect(request.headers.Version).toBe('0.202.0');
     expect(request.headers.Session_id).toBe('session-from-client');
-    expect(request.headers['User-Agent']).toBe('OpenClaw/1.0');
+    expect(request.headers['User-Agent']).toContain('codex_cli_rs/0.137.0');
     expect(request.headers['x-responsesapi-include-timing-metrics']).toBe('1');
     expect(request.headers.origin).toBeUndefined();
     expect(request.headers.referer).toBeUndefined();
@@ -1094,9 +1094,9 @@ describe('buildUpstreamEndpointRequest', () => {
     expect(request.body.max_output_tokens).toBeUndefined();
   });
 
-  it('applies configured codex header defaults with CLIProxyAPI-compatible precedence', () => {
+  it('applies configured codex header defaults with Codex client identity normalization', () => {
     (config as any).codexHeaderDefaults = {
-      userAgent: 'codex-config-ua/1.0',
+      userAgent: 'codex_cli_rs/0.202.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464',
       betaFeatures: 'multi_agent',
     };
 
@@ -1121,7 +1121,7 @@ describe('buildUpstreamEndpointRequest', () => {
       },
     } as any);
 
-    expect(websocketRequest.headers['User-Agent']).toBe('codex-config-ua/1.0');
+    expect(websocketRequest.headers['User-Agent']).toBe('codex_cli_rs/0.202.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464');
     expect(websocketRequest.headers['x-codex-beta-features']).toBe('multi_agent');
 
     const clientHeaderRequest = buildUpstreamEndpointRequest({
@@ -1147,7 +1147,7 @@ describe('buildUpstreamEndpointRequest', () => {
       },
     } as any);
 
-    expect(clientHeaderRequest.headers['User-Agent']).toBe('codex-config-ua/1.0');
+    expect(clientHeaderRequest.headers['User-Agent']).toBe('codex_cli_rs/0.202.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464');
     expect(clientHeaderRequest.headers['x-codex-beta-features']).toBe('client-beta');
 
     const httpRequest = buildUpstreamEndpointRequest({

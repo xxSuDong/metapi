@@ -1,5 +1,8 @@
 import { pbkdf2Sync, randomUUID } from 'node:crypto';
-import { inferCodexOfficialOriginator } from '../../shared/codexClientFamily.js';
+import {
+  detectCodexOfficialClientApp,
+  inferCodexOfficialOriginator,
+} from '../../shared/codexClientFamily.js';
 import { CODEX_CLIENT_VERSION, CODEX_DEFAULT_USER_AGENT } from '../../shared/codexClientDefaults.js';
 
 const CLAUDE_DEFAULT_USER_AGENT = 'claude-cli/2.1.63 (external, cli)';
@@ -113,6 +116,20 @@ function asTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function getCodexOfficialUserAgent(
+  headers?: Record<string, unknown> | Record<string, string>,
+): string | null {
+  const userAgent = getInputHeader(headers, 'user-agent');
+  if (!userAgent) return null;
+  return detectCodexOfficialClientApp({ 'user-agent': userAgent }) ? userAgent : null;
+}
+
+function normalizeCodexOfficialUserAgent(value?: string | null): string | null {
+  const userAgent = asTrimmedString(value);
+  if (!userAgent) return null;
+  return detectCodexOfficialClientApp({ 'user-agent': userAgent }) ? userAgent : null;
+}
+
 export function buildCodexRuntimeHeaders(input: {
   baseHeaders: Record<string, string>;
   providerHeaders?: Record<string, string>;
@@ -136,16 +153,16 @@ export function buildCodexRuntimeHeaders(input: {
   );
   const originator = inferCodexOfficialOriginator(input.providerHeaders)
     || inferCodexOfficialOriginator(input.baseHeaders)
-    || getInputHeader(input.providerHeaders, 'originator')
     || input.originatorDefault
     || 'codex_cli_rs';
   const accountId = getInputHeader(input.providerHeaders, 'chatgpt-account-id');
   const version = getInputHeader(input.baseHeaders, 'version')
     || input.versionDefault
     || CODEX_CLIENT_VERSION;
-  const userAgent = input.userAgentOverride
-    || getInputHeader(input.baseHeaders, 'user-agent')
-    || input.userAgentDefault
+  const userAgent = normalizeCodexOfficialUserAgent(input.userAgentOverride)
+    || getCodexOfficialUserAgent(input.providerHeaders)
+    || getCodexOfficialUserAgent(input.baseHeaders)
+    || normalizeCodexOfficialUserAgent(input.userAgentDefault)
     || CODEX_DEFAULT_USER_AGENT;
   const codexBetaFeatures = input.codexBetaFeatures || null;
   const codexTurnState = input.codexTurnState || null;
