@@ -91,6 +91,7 @@ const METAPI_INTERNAL_HEADER_BLOCKLIST = new Set([
   'x-metapi-responses-websocket-mode',
   'x-metapi-responses-websocket-transport',
 ]);
+const METAPI_PROXY_USER_AGENT = 'metapi/1.0';
 
 const ANTIGRAVITY_RUNTIME_USER_AGENT = 'antigravity/1.19.6 darwin/arm64';
 const MINIMAX_HOST_SUFFIXES = ['minimaxi.com', 'minimax.chat'];
@@ -160,6 +161,29 @@ function shouldSkipPassthroughHeader(key: string): boolean {
   return false;
 }
 
+function isOpenAiSdkUserAgent(userAgent: string): boolean {
+  const normalized = userAgent.trim().toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized.startsWith('openai/')
+    || normalized.startsWith('openai-')
+    || normalized.includes('openai/python')
+    || normalized.includes('openai-node')
+    || normalized.includes('openai-java')
+    || normalized.includes('openai-go')
+    || normalized.includes('openai-dotnet')
+    || normalized.includes('openai-ruby')
+    || normalized.includes('openai-php')
+    || normalized.includes('asyncopenai')
+  );
+}
+
+function normalizePassthroughUserAgent(rawValue: unknown): string | null {
+  const userAgent = headerValueToString(rawValue);
+  if (!userAgent) return null;
+  return isOpenAiSdkUserAgent(userAgent) ? METAPI_PROXY_USER_AGENT : userAgent;
+}
+
 function extractSafePassthroughHeaders(
   headers?: Record<string, unknown>,
 ): Record<string, string> {
@@ -170,7 +194,9 @@ function extractSafePassthroughHeaders(
     const key = rawKey.toLowerCase();
     if (!key || shouldSkipPassthroughHeader(key)) continue;
 
-    const value = headerValueToString(rawValue);
+    const value = key === 'user-agent'
+      ? normalizePassthroughUserAgent(rawValue)
+      : headerValueToString(rawValue);
     if (!value) continue;
     forwarded[key] = value;
   }
