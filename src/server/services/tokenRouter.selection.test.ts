@@ -138,6 +138,55 @@ describe('TokenRouter selection scoring', () => {
     }).returning().get();
   }
 
+  it('falls back to a cooldown-only channel when it is the only otherwise eligible option', async () => {
+    const route = await createRoute('gpt-5.5');
+    const site = await createSite('cooldown-fallback-site');
+    const account = await createAccount(site.id, 'cooldown-fallback-user');
+    const token = await createToken(account.id, 'cooldown-fallback-token');
+    const nowMs = Date.now();
+    const channel = await db.insert(schema.routeChannels).values({
+      routeId: route.id,
+      accountId: account.id,
+      tokenId: token.id,
+      priority: 0,
+      weight: 10,
+      enabled: true,
+      failCount: 2,
+      lastFailAt: new Date(nowMs).toISOString(),
+      cooldownUntil: new Date(nowMs + 60_000).toISOString(),
+    }).returning().get();
+
+    const selected = await new TokenRouter().selectChannel('gpt-5.5');
+
+    expect(selected?.channel.id).toBe(channel.id);
+  });
+
+  it('does not fall back to cooldown-only channels with unusable credentials', async () => {
+    const route = await createRoute('gpt-5.5');
+    const site = await createSite('cooldown-unusable-site');
+    const account = await createAccount(site.id, 'cooldown-unusable-user');
+    const token = await createToken(account.id, 'cooldown-unusable-token');
+    await db.update(schema.accountTokens).set({
+      enabled: false,
+    }).where(eq(schema.accountTokens.id, token.id)).run();
+    const nowMs = Date.now();
+    await db.insert(schema.routeChannels).values({
+      routeId: route.id,
+      accountId: account.id,
+      tokenId: token.id,
+      priority: 0,
+      weight: 10,
+      enabled: true,
+      failCount: 2,
+      lastFailAt: new Date(nowMs).toISOString(),
+      cooldownUntil: new Date(nowMs + 60_000).toISOString(),
+    }).run();
+
+    const selected = await new TokenRouter().selectChannel('gpt-5.5');
+
+    expect(selected).toBeNull();
+  });
+
   it('reuses a preferred channel only while it remains healthy', async () => {
     config.routingWeights = {
       baseWeightFactor: 1,

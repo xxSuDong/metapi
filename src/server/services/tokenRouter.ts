@@ -1293,6 +1293,17 @@ export function filterRecentlyFailedCandidates<T extends { channel: FailureAware
   return healthy.length > 0 ? healthy : candidates;
 }
 
+function recoverCooldownOnlyCandidates<T extends { channel: FailureAwareChannel }>(
+  normalCandidates: T[],
+  cooldownOnlyCandidates: T[],
+  nowMs = Date.now(),
+): T[] {
+  if (normalCandidates.length > 0) return normalCandidates;
+  if (cooldownOnlyCandidates.length === 0) return normalCandidates;
+  const retryable = cooldownOnlyCandidates.filter((candidate) => isChannelRecentlyFailed(candidate.channel, nowMs));
+  return retryable.length > 0 ? retryable : normalCandidates;
+}
+
 export type RouteDecisionExplanation = RouteDecision & {
   routeId?: number;
   modelPattern?: string;
@@ -1318,6 +1329,7 @@ type CandidateEligibilityOptions = {
   requestedModel: string;
   bypassSourceModelCheck?: boolean;
   excludeChannelIds?: number[];
+  ignoreChannelCooldown?: boolean;
   nowIso?: string;
   downstreamPolicy?: DownstreamRoutingPolicy;
 };
@@ -2856,15 +2868,29 @@ export class TokenRouter {
 
     const nowIso = new Date().toISOString();
     const nowMs = Date.now();
-    const available = match.channels.filter((candidate) => (
+    const availableWithoutCooldown = match.channels.filter((candidate) => (
       this.getCandidateEligibilityReasons(candidate, {
         requestedModel,
         bypassSourceModelCheck,
         excludeChannelIds,
+        ignoreChannelCooldown: true,
         nowIso,
         downstreamPolicy,
       }).length === 0
     ));
+    const available = recoverCooldownOnlyCandidates(
+      match.channels.filter((candidate) => (
+        this.getCandidateEligibilityReasons(candidate, {
+          requestedModel,
+          bypassSourceModelCheck,
+          excludeChannelIds,
+          nowIso,
+          downstreamPolicy,
+        }).length === 0
+      )),
+      availableWithoutCooldown,
+      nowMs,
+    );
 
     if (available.length === 0) return null;
 
@@ -3371,7 +3397,7 @@ export class TokenRouter {
     const tokenValue = this.resolveChannelTokenValue(candidate);
     if (!tokenValue) reasonParts.push('令牌不可用');
 
-    if (candidate.channel.cooldownUntil && candidate.channel.cooldownUntil > nowIso) {
+    if (!options.ignoreChannelCooldown && candidate.channel.cooldownUntil && candidate.channel.cooldownUntil > nowIso) {
       reasonParts.push('冷却中');
     }
 
