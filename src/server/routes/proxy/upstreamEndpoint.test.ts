@@ -93,6 +93,22 @@ describe('resolveUpstreamEndpointCandidates', () => {
     );
     expect(responsesOrder).toEqual(['responses', 'chat', 'messages']);
 
+    const codexOpenAiOrder = await resolveUpstreamEndpointCandidates(
+      {
+        ...baseContext,
+        site: { ...baseContext.site, platform: 'new-api' },
+      },
+      'gpt-5.3',
+      'openai',
+      undefined,
+      undefined,
+      {
+        downstreamClientKind: 'codex',
+        downstreamUserAgent: 'OpenAI/Python 2.24.0',
+      },
+    );
+    expect(codexOpenAiOrder).toEqual(['responses', 'chat', 'messages']);
+
     const claudeResponsesOrder = await resolveUpstreamEndpointCandidates(
       {
         ...baseContext,

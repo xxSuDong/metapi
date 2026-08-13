@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { UpstreamEndpoint } from '../proxy-core/orchestration/upstreamRequest.js';
 import { resolveProviderProfile } from '../proxy-core/providers/registry.js';
 import { config } from '../config.js';
@@ -19,7 +20,9 @@ import {
   buildClaudeRuntimeHeaders,
   getInputHeader,
   headerValueToString,
+  uuidFromSeed,
 } from '../proxy-core/providers/headerUtils.js';
+import { isOpenAiSdkUserAgent } from '../shared/openAiSdkClient.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object';
@@ -92,6 +95,22 @@ const METAPI_INTERNAL_HEADER_BLOCKLIST = new Set([
   'x-metapi-responses-websocket-transport',
 ]);
 const METAPI_PROXY_USER_AGENT = 'metapi/1.0';
+const CODEX_DESKTOP_COMPAT_USER_AGENT = 'Codex Desktop/0.147.0-alpha.6.6 (Windows 10.0.28000; x86_64) unknown (Codex Desktop; 26.803.81509)';
+const CODEX_DESKTOP_COMPAT_ORIGINATOR = 'Codex Desktop';
+const CODEX_DESKTOP_COMPAT_BETA_FEATURES = 'remote_compaction_v2';
+const CODEX_DESKTOP_COMPAT_PLATFORMS = new Set([
+  '',
+  'new-api',
+  'newapi',
+  'one-api',
+  'oneapi',
+  'one-hub',
+  'onehub',
+  'done-hub',
+  'donehub',
+  'sub2api',
+  'veloera',
+]);
 
 const ANTIGRAVITY_RUNTIME_USER_AGENT = 'antigravity/1.19.6 darwin/arm64';
 const MINIMAX_HOST_SUFFIXES = ['minimaxi.com', 'minimax.chat'];
@@ -161,23 +180,6 @@ function shouldSkipPassthroughHeader(key: string): boolean {
   return false;
 }
 
-function isOpenAiSdkUserAgent(userAgent: string): boolean {
-  const normalized = userAgent.trim().toLowerCase();
-  if (!normalized) return false;
-  return (
-    normalized.startsWith('openai/')
-    || normalized.startsWith('openai-')
-    || normalized.includes('openai/python')
-    || normalized.includes('openai-node')
-    || normalized.includes('openai-java')
-    || normalized.includes('openai-go')
-    || normalized.includes('openai-dotnet')
-    || normalized.includes('openai-ruby')
-    || normalized.includes('openai-php')
-    || normalized.includes('asyncopenai')
-  );
-}
-
 function normalizePassthroughUserAgent(rawValue: unknown): string | null {
   const userAgent = headerValueToString(rawValue);
   if (!userAgent) return null;
@@ -202,6 +204,120 @@ function extractSafePassthroughHeaders(
   }
 
   return forwarded;
+}
+
+function shouldApplyCodexDesktopCompatibility(input: {
+  downstreamHeaders?: Record<string, unknown>;
+  sitePlatform: string;
+}): boolean {
+  if (!CODEX_DESKTOP_COMPAT_PLATFORMS.has(input.sitePlatform)) return false;
+  const rawUserAgent = getInputHeader(input.downstreamHeaders, 'user-agent');
+  return !!rawUserAgent && isOpenAiSdkUserAgent(rawUserAgent);
+}
+
+function resolveCodexCompatibilitySessionId(input: {
+  headers: Record<string, string>;
+  downstreamHeaders?: Record<string, unknown>;
+  modelName: string;
+  siteUrl?: string;
+  tokenValue: string;
+  codexSessionCacheKey?: string | null;
+  codexExplicitSessionId?: string | null;
+}): string {
+  const existing = (
+    getInputHeader(input.headers, 'session-id')
+    || getInputHeader(input.headers, 'session_id')
+    || getInputHeader(input.headers, 'conversation-id')
+    || getInputHeader(input.headers, 'conversation_id')
+    || getInputHeader(input.downstreamHeaders, 'session-id')
+    || getInputHeader(input.downstreamHeaders, 'session_id')
+    || getInputHeader(input.downstreamHeaders, 'conversation-id')
+    || getInputHeader(input.downstreamHeaders, 'conversation_id')
+    || asTrimmedString(input.codexExplicitSessionId)
+  );
+  if (existing) return existing;
+
+  const continuityKey = (
+    asTrimmedString(input.codexSessionCacheKey)
+    || [
+      asTrimmedString(input.modelName) || 'unknown-model',
+      asTrimmedString(input.siteUrl) || 'unknown-site',
+      asTrimmedString(input.tokenValue) || 'unknown-token',
+    ].join(':')
+  );
+  return uuidFromSeed(`metapi:codex-desktop-compat:session:${continuityKey}`);
+}
+
+function buildCodexCompatibilityTurnMetadata(input: {
+  sessionId: string;
+  siteUrl?: string;
+  tokenValue: string;
+}): string {
+  const installationSeed = [
+    asTrimmedString(input.siteUrl) || 'unknown-site',
+    asTrimmedString(input.tokenValue) || 'unknown-token',
+  ].join(':');
+  return JSON.stringify({
+    installation_id: uuidFromSeed(`metapi:codex-desktop-compat:installation:${installationSeed}`),
+    session_id: input.sessionId,
+    thread_id: input.sessionId,
+    turn_id: randomUUID(),
+    window_id: `${input.sessionId}:0`,
+    request_kind: 'turn',
+    thread_source: 'user',
+    sandbox: 'none',
+    turn_started_at_unix_ms: Date.now(),
+    workspace_kind: 'projectless',
+  });
+}
+
+function applyCodexDesktopCompatibilityHeaders(
+  headers: Record<string, string>,
+  input: {
+    downstreamHeaders?: Record<string, unknown>;
+    sitePlatform: string;
+    modelName: string;
+    siteUrl?: string;
+    tokenValue: string;
+    codexSessionCacheKey?: string | null;
+    codexExplicitSessionId?: string | null;
+  },
+): Record<string, string> {
+  if (!shouldApplyCodexDesktopCompatibility(input)) return headers;
+
+  const sessionId = resolveCodexCompatibilitySessionId({
+    headers,
+    downstreamHeaders: input.downstreamHeaders,
+    modelName: input.modelName,
+    siteUrl: input.siteUrl,
+    tokenValue: input.tokenValue,
+    codexSessionCacheKey: input.codexSessionCacheKey,
+    codexExplicitSessionId: input.codexExplicitSessionId,
+  });
+  const configuredUserAgent = asTrimmedString(config.codexHeaderDefaults.userAgent);
+  const configuredBetaFeatures = asTrimmedString(config.codexHeaderDefaults.betaFeatures);
+  const turnMetadata = (
+    getInputHeader(headers, 'x-codex-turn-metadata')
+    || getInputHeader(input.downstreamHeaders, 'x-codex-turn-metadata')
+    || buildCodexCompatibilityTurnMetadata({
+      sessionId,
+      siteUrl: input.siteUrl,
+      tokenValue: input.tokenValue,
+    })
+  );
+
+  return {
+    ...headers,
+    originator: getInputHeader(headers, 'originator') || CODEX_DESKTOP_COMPAT_ORIGINATOR,
+    'session-id': getInputHeader(headers, 'session-id') || sessionId,
+    'user-agent': configuredUserAgent || CODEX_DESKTOP_COMPAT_USER_AGENT,
+    'x-codex-beta-features': (
+      getInputHeader(headers, 'x-codex-beta-features')
+      || configuredBetaFeatures
+      || CODEX_DESKTOP_COMPAT_BETA_FEATURES
+    ),
+    'x-codex-turn-metadata': turnMetadata,
+  };
 }
 
 function extractClaudePassthroughHeaders(
@@ -573,7 +689,18 @@ export function buildUpstreamEndpointRequest(input: {
     return '/v1/chat/completions';
   };
 
-  const passthroughHeaders = extractSafePassthroughHeaders(input.downstreamHeaders);
+  const passthroughHeaders = applyCodexDesktopCompatibilityHeaders(
+    extractSafePassthroughHeaders(input.downstreamHeaders),
+    {
+      downstreamHeaders: input.downstreamHeaders,
+      sitePlatform,
+      modelName: input.modelName,
+      siteUrl: input.siteUrl,
+      tokenValue: input.tokenValue,
+      codexSessionCacheKey: input.codexSessionCacheKey,
+      codexExplicitSessionId: input.codexExplicitSessionId,
+    },
+  );
   const codexPassthroughHeaders = sitePlatform === 'codex'
     ? extractCodexPassthroughHeaders(input.downstreamHeaders)
     : {};

@@ -9,10 +9,13 @@ import {
   buildEndpointCapabilityProfile,
 } from './upstreamEndpointRuntimeMemory.js';
 import type { DownstreamFormat } from '../transformers/shared/normalized.js';
+import { isOpenAiSdkUserAgent } from '../shared/openAiSdkClient.js';
 
 export type EndpointPreference = DownstreamFormat | 'responses';
 export type EndpointDerivationHints = {
   oauthProvider?: string | null;
+  downstreamClientKind?: string | null;
+  downstreamUserAgent?: string | null;
   requestKind?: 'default' | 'responses-compact' | 'claude-count-tokens';
   requiresNativeResponsesFileUrl?: boolean;
 };
@@ -37,6 +40,22 @@ function asTrimmedString(value: unknown): string {
 
 function normalizePlatformName(platform: unknown): string {
   return asTrimmedString(platform).toLowerCase();
+}
+
+function isGenericOpenAiCompatiblePlatform(platform: string): boolean {
+  return (
+    platform === ''
+    || platform === 'new-api'
+    || platform === 'newapi'
+    || platform === 'one-api'
+    || platform === 'oneapi'
+    || platform === 'one-hub'
+    || platform === 'onehub'
+    || platform === 'done-hub'
+    || platform === 'donehub'
+    || platform === 'sub2api'
+    || platform === 'veloera'
+  );
 }
 
 function normalizeEndpointTypes(value: unknown): UpstreamEndpoint[] {
@@ -89,6 +108,8 @@ function preferredEndpointOrder(
 ): UpstreamEndpoint[] {
   const platform = normalizePlatformName(sitePlatform);
   const oauthProvider = asTrimmedString(hints?.oauthProvider).toLowerCase();
+  const downstreamClientKind = asTrimmedString(hints?.downstreamClientKind).toLowerCase();
+  const downstreamUserAgent = asTrimmedString(hints?.downstreamUserAgent);
 
   if (hints?.requestKind === 'responses-compact') {
     return ['responses'];
@@ -127,6 +148,15 @@ function preferredEndpointOrder(
 
   if (downstreamFormat === 'openai' && preferMessagesForClaudeModel) {
     return ['messages', 'chat', 'responses'];
+  }
+
+  if (
+    downstreamFormat === 'openai'
+    && downstreamClientKind === 'codex'
+    && isOpenAiSdkUserAgent(downstreamUserAgent)
+    && isGenericOpenAiCompatiblePlatform(platform)
+  ) {
+    return ['responses', 'chat', 'messages'];
   }
 
   const base = ['chat', 'messages', 'responses'] as UpstreamEndpoint[];

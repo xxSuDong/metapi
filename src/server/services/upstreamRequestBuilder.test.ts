@@ -211,13 +211,13 @@ describe('upstreamRequestBuilder', () => {
     expect(request.headers['x-test-header']).toBeUndefined();
   });
 
-  it('normalizes openai sdk user agents before forwarding generic upstream requests', () => {
+  it('synthesizes Codex Desktop compatibility headers for OpenAI SDK codex-shaped upstream requests', () => {
     const request = buildUpstreamEndpointRequest({
       endpoint: 'chat',
       modelName: 'upstream-gpt',
       stream: false,
       tokenValue: 'sk-test',
-      sitePlatform: 'openai',
+      sitePlatform: 'new-api',
       siteUrl: 'https://example.com',
       openaiBody: {
         model: 'gpt-5.2',
@@ -226,10 +226,15 @@ describe('upstreamRequestBuilder', () => {
       downstreamFormat: 'openai',
       downstreamHeaders: {
         'user-agent': 'OpenAI/Python 2.24.0',
+        'x-stainless-lang': 'python',
       },
     });
 
-    expect(request.headers['user-agent']).toBe('metapi/1.0');
+    expect(request.headers.originator).toBe('Codex Desktop');
+    expect(request.headers['session-id']).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(request.headers['user-agent']).toContain('Codex Desktop/');
+    expect(request.headers['x-codex-beta-features']).toBe('remote_compaction_v2');
+    expect(request.headers['x-codex-turn-metadata']).toContain(request.headers['session-id']);
   });
 
   it('drops responses-style continuation fields before proxying Claude count_tokens upstream', () => {

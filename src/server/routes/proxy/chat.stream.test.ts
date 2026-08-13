@@ -3570,6 +3570,60 @@ describe('chat proxy stream behavior', () => {
     expect(body?.choices?.[0]?.message?.content).toContain('ok via responses fallback after 502');
   });
 
+  it('routes codex-shaped OpenAI SDK chat requests to /v1/responses with Codex Desktop headers', async () => {
+    selectChannelMock.mockReturnValue({
+      channel: { id: 11, routeId: 22 },
+      site: { name: 'generic-site', url: 'https://generic.example.com', platform: 'new-api' },
+      account: { id: 33, username: 'demo-user' },
+      tokenName: 'default',
+      tokenValue: 'sk-generic',
+      actualModel: 'gpt-5.5',
+    });
+
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      id: 'resp_codex_sdk_chat_compat',
+      object: 'response',
+      model: 'gpt-5.5',
+      status: 'completed',
+      output_text: 'ok via responses for sdk client',
+      output: [{
+        id: 'msg_codex_sdk_chat_compat',
+        type: 'message',
+        role: 'assistant',
+        status: 'completed',
+        content: [{ type: 'output_text', text: 'ok via responses for sdk client' }],
+      }],
+      usage: { input_tokens: 5, output_tokens: 2, total_tokens: 7 },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: {
+        'user-agent': 'OpenAI/Python 2.24.0',
+        'x-stainless-lang': 'python',
+      },
+      payload: {
+        model: 'gpt-5.5',
+        stream: false,
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [targetUrl, options] = fetchMock.mock.calls[0] as [string, any];
+    expect(targetUrl).toContain('/v1/responses');
+    expect(options.headers.originator).toBe('Codex Desktop');
+    expect(options.headers['user-agent']).toContain('Codex Desktop/');
+    expect(options.headers['x-codex-beta-features']).toBe('remote_compaction_v2');
+    expect(options.headers['session-id']).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(response.json()?.choices?.[0]?.message?.content).toContain('ok via responses for sdk client');
+  });
+
   it('stops after the first failed protocol when cross protocol fallback is disabled', async () => {
     (config as any).disableCrossProtocolFallback = true;
     selectChannelMock.mockReturnValue({

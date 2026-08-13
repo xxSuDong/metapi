@@ -12,6 +12,7 @@ import {
   buildUpstreamEndpointRequest,
   resolveUpstreamEndpointCandidates,
 } from '../../services/upstreamEndpointRuntime.js';
+import { getInputHeader } from '../providers/headerUtils.js';
 import {
   getUpstreamEndpointRuntimeStateSnapshot,
   recordUpstreamEndpointFailure,
@@ -298,6 +299,8 @@ export async function handleChatSurfaceRequest(
         },
         {
           oauthProvider: oauth?.provider,
+          downstreamClientKind: clientContext.clientKind,
+          downstreamUserAgent: getInputHeader(request.headers as Record<string, unknown>, 'user-agent'),
         },
       ),
     ];

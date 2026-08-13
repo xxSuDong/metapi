@@ -60,6 +60,22 @@ describe('upstreamEndpointDerivation', () => {
     expect(order).toEqual(['responses', 'chat', 'messages']);
   });
 
+  it('derives codex-shaped OpenAI SDK requests to generic upstreams as responses-first', async () => {
+    const order = await resolveUpstreamEndpointCandidates(
+      baseContext,
+      'gpt-5.3',
+      'openai',
+      undefined,
+      undefined,
+      {
+        downstreamClientKind: 'codex',
+        downstreamUserAgent: 'OpenAI/Python 2.24.0',
+      },
+    );
+
+    expect(order).toEqual(['responses', 'chat', 'messages']);
+  });
+
   it('keeps explicit openai platforms on responses-first ordering even for claude-family models', async () => {
     const order = await resolveUpstreamEndpointCandidates(
       {
