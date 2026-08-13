@@ -93,6 +93,24 @@ describe('detectCliProfile', () => {
     });
   });
 
+  it('detects WorkBuddy OpenAI-compatible chat requests as Codex shaped', () => {
+    expect(detectCliProfile({
+      downstreamPath: '/v1/chat/completions',
+      headers: {
+        'user-agent': 'WorkBuddy/5.3.12 WorkBuddy/5.3.12 CLI/2.115.0',
+      },
+    })).toMatchObject({
+      id: 'codex',
+      clientAppId: 'codex',
+      clientAppName: 'Codex',
+      clientConfidence: 'heuristic',
+      capabilities: {
+        supportsResponsesWebsocketIncremental: true,
+        echoesTurnState: true,
+      },
+    });
+  });
+
   it('does not classify non-responses siblings as Codex requests', () => {
     expect(detectCliProfile({
       downstreamPath: '/v1/responsesfoo',

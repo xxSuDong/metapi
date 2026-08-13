@@ -237,6 +237,32 @@ describe('upstreamRequestBuilder', () => {
     expect(request.headers['x-codex-turn-metadata']).toContain(request.headers['session-id']);
   });
 
+  it('synthesizes Codex Desktop compatibility headers for WorkBuddy codex-shaped upstream requests', () => {
+    const request = buildUpstreamEndpointRequest({
+      endpoint: 'responses',
+      modelName: 'upstream-gpt',
+      stream: false,
+      tokenValue: 'sk-test',
+      sitePlatform: 'new-api',
+      siteUrl: 'https://example.com',
+      openaiBody: {
+        model: 'gpt-5.5',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      downstreamFormat: 'openai',
+      downstreamHeaders: {
+        'user-agent': 'WorkBuddy/5.3.12 WorkBuddy/5.3.12 CLI/2.115.0',
+      },
+    });
+
+    expect(request.headers.originator).toBe('Codex Desktop');
+    expect(request.headers['session-id']).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(request.headers['user-agent']).toContain('Codex Desktop/');
+    expect(request.headers['user-agent']).not.toContain('WorkBuddy');
+    expect(request.headers['x-codex-beta-features']).toBe('remote_compaction_v2');
+    expect(request.headers['x-codex-turn-metadata']).toContain(request.headers['session-id']);
+  });
+
   it('drops responses-style continuation fields before proxying Claude count_tokens upstream', () => {
     const request = buildClaudeCountTokensUpstreamRequest({
       modelName: 'claude-opus-4-6',

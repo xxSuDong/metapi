@@ -76,6 +76,22 @@ describe('upstreamEndpointDerivation', () => {
     expect(order).toEqual(['responses', 'chat', 'messages']);
   });
 
+  it('derives codex-shaped WorkBuddy requests to generic upstreams as responses-first', async () => {
+    const order = await resolveUpstreamEndpointCandidates(
+      baseContext,
+      'gpt-5.5',
+      'openai',
+      undefined,
+      undefined,
+      {
+        downstreamClientKind: 'codex',
+        downstreamUserAgent: 'WorkBuddy/5.3.12 WorkBuddy/5.3.12 CLI/2.115.0',
+      },
+    );
+
+    expect(order).toEqual(['responses', 'chat', 'messages']);
+  });
+
   it('keeps explicit openai platforms on responses-first ordering even for claude-family models', async () => {
     const order = await resolveUpstreamEndpointCandidates(
       {

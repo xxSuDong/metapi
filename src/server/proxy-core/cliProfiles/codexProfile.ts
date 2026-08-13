@@ -3,6 +3,7 @@ import {
   detectCodexOfficialClientApp as detectCodexOfficialClientAppFromHeaders,
   isCodexOfficialClientHeaders,
 } from '../../shared/codexClientFamily.js';
+import { isWorkBuddyUserAgent } from '../../shared/openAiSdkClient.js';
 
 type CodexOfficialClientApp = {
   clientAppId: string;
@@ -96,6 +97,7 @@ export function isCodexRequest(input: DetectCliProfileInput): boolean {
   if (!headers) return false;
 
   if (isCodexOfficialClientHeaders(headers)) return true;
+  if (isWorkBuddyUserAgent(getHeaderValue(headers, 'user-agent') || '')) return true;
   if (getHeaderValue(headers, 'openai-beta')) return true;
   if (hasHeaderPrefix(headers, 'x-stainless-')) return true;
   if (getCodexSessionId(headers)) return true;

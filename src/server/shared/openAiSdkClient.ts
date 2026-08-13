@@ -14,3 +14,13 @@ export function isOpenAiSdkUserAgent(userAgent: string): boolean {
     || normalized.includes('asyncopenai')
   );
 }
+
+export function isWorkBuddyUserAgent(userAgent: string): boolean {
+  const normalized = userAgent.trim().toLowerCase();
+  if (!normalized) return false;
+  return /(?:^|\s)workbuddy\//.test(normalized);
+}
+
+export function isCodexCompatibleSdkUserAgent(userAgent: string): boolean {
+  return isOpenAiSdkUserAgent(userAgent) || isWorkBuddyUserAgent(userAgent);
+}

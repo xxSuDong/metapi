@@ -22,7 +22,7 @@ import {
   headerValueToString,
   uuidFromSeed,
 } from '../proxy-core/providers/headerUtils.js';
-import { isOpenAiSdkUserAgent } from '../shared/openAiSdkClient.js';
+import { isCodexCompatibleSdkUserAgent, isOpenAiSdkUserAgent } from '../shared/openAiSdkClient.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object';
@@ -212,7 +212,7 @@ function shouldApplyCodexDesktopCompatibility(input: {
 }): boolean {
   if (!CODEX_DESKTOP_COMPAT_PLATFORMS.has(input.sitePlatform)) return false;
   const rawUserAgent = getInputHeader(input.downstreamHeaders, 'user-agent');
-  return !!rawUserAgent && isOpenAiSdkUserAgent(rawUserAgent);
+  return !!rawUserAgent && isCodexCompatibleSdkUserAgent(rawUserAgent);
 }
 
 function resolveCodexCompatibilitySessionId(input: {

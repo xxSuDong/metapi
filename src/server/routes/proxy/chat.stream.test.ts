@@ -3624,6 +3624,60 @@ describe('chat proxy stream behavior', () => {
     expect(response.json()?.choices?.[0]?.message?.content).toContain('ok via responses for sdk client');
   });
 
+  it('routes codex-shaped WorkBuddy chat requests to /v1/responses with Codex Desktop headers', async () => {
+    selectChannelMock.mockReturnValue({
+      channel: { id: 11, routeId: 22 },
+      site: { name: 'generic-site', url: 'https://generic.example.com', platform: 'new-api' },
+      account: { id: 33, username: 'demo-user' },
+      tokenName: 'default',
+      tokenValue: 'sk-generic',
+      actualModel: 'gpt-5.5',
+    });
+
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      id: 'resp_workbuddy_chat_compat',
+      object: 'response',
+      model: 'gpt-5.5',
+      status: 'completed',
+      output_text: 'ok via responses for workbuddy',
+      output: [{
+        id: 'msg_workbuddy_chat_compat',
+        type: 'message',
+        role: 'assistant',
+        status: 'completed',
+        content: [{ type: 'output_text', text: 'ok via responses for workbuddy' }],
+      }],
+      usage: { input_tokens: 5, output_tokens: 2, total_tokens: 7 },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: {
+        'user-agent': 'WorkBuddy/5.3.12 WorkBuddy/5.3.12 CLI/2.115.0',
+      },
+      payload: {
+        model: 'gpt-5.5',
+        stream: false,
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [targetUrl, options] = fetchMock.mock.calls[0] as [string, any];
+    expect(targetUrl).toContain('/v1/responses');
+    expect(options.headers.originator).toBe('Codex Desktop');
+    expect(options.headers['user-agent']).toContain('Codex Desktop/');
+    expect(options.headers['user-agent']).not.toContain('WorkBuddy');
+    expect(options.headers['x-codex-beta-features']).toBe('remote_compaction_v2');
+    expect(options.headers['session-id']).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(response.json()?.choices?.[0]?.message?.content).toContain('ok via responses for workbuddy');
+  });
+
   it('stops after the first failed protocol when cross protocol fallback is disabled', async () => {
     (config as any).disableCrossProtocolFallback = true;
     selectChannelMock.mockReturnValue({

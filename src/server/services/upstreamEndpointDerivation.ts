@@ -9,7 +9,7 @@ import {
   buildEndpointCapabilityProfile,
 } from './upstreamEndpointRuntimeMemory.js';
 import type { DownstreamFormat } from '../transformers/shared/normalized.js';
-import { isOpenAiSdkUserAgent } from '../shared/openAiSdkClient.js';
+import { isCodexCompatibleSdkUserAgent } from '../shared/openAiSdkClient.js';
 
 export type EndpointPreference = DownstreamFormat | 'responses';
 export type EndpointDerivationHints = {
@@ -153,7 +153,7 @@ function preferredEndpointOrder(
   if (
     downstreamFormat === 'openai'
     && downstreamClientKind === 'codex'
-    && isOpenAiSdkUserAgent(downstreamUserAgent)
+    && isCodexCompatibleSdkUserAgent(downstreamUserAgent)
     && isGenericOpenAiCompatiblePlatform(platform)
   ) {
     return ['responses', 'chat', 'messages'];
