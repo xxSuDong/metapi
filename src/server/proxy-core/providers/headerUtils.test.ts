@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CODEX_CLIENT_VERSION } from '../../shared/codexClientDefaults.js';
 
 describe('provider header utils', () => {
   it('coerces header values and performs case-insensitive lookups', async () => {
@@ -89,8 +90,8 @@ describe('provider header utils', () => {
       explicitSessionId: null,
     });
 
-    expect(headers.Version).toBe('0.137.0');
-    expect(headers['User-Agent']).toContain('codex_cli_rs/0.137.0');
+    expect(headers.Version).toBe(CODEX_CLIENT_VERSION);
+    expect(headers['User-Agent']).toContain(`codex_cli_rs/${CODEX_CLIENT_VERSION}`);
   });
 
   it('normalizes generic SDK identities before proxying Codex upstream requests', async () => {
@@ -110,7 +111,7 @@ describe('provider header utils', () => {
     });
 
     expect(headers.Originator).toBe('codex_cli_rs');
-    expect(headers['User-Agent']).toContain('codex_cli_rs/0.137.0');
+    expect(headers['User-Agent']).toContain(`codex_cli_rs/${CODEX_CLIENT_VERSION}`);
     expect(headers['User-Agent']).not.toContain('OpenAI/Python');
   });
 
@@ -144,7 +145,7 @@ describe('provider header utils', () => {
       userAgentOverride: 'CodexClient/1.0',
     });
 
-    expect(headers['User-Agent']).toContain('codex_cli_rs/0.137.0');
+    expect(headers['User-Agent']).toContain(`codex_cli_rs/${CODEX_CLIENT_VERSION}`);
     expect(headers['User-Agent']).not.toContain('CodexClient/1.0');
   });
 

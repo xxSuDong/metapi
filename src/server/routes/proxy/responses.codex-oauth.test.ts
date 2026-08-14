@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { config } from '../../config.js';
 import { resetCodexHttpSessionQueue } from '../../proxy-core/runtime/codexHttpSessionQueue.js';
 import { resetCodexSessionResponseStore } from '../../proxy-core/runtime/codexSessionResponseStore.js';
+import { CODEX_CLIENT_VERSION } from '../../shared/codexClientDefaults.js';
 
 const fetchMock = vi.fn();
 const selectChannelMock = vi.fn();
@@ -292,10 +293,10 @@ describe('responses proxy codex oauth refresh', () => {
     expect(secondOptions.headers.Authorization).toBe('Bearer fresh-access-token');
     expect(secondOptions.headers.Originator || secondOptions.headers.originator).toBe('codex_cli_rs');
     expect(secondOptions.headers['Chatgpt-Account-Id'] || secondOptions.headers['chatgpt-account-id']).toBe('chatgpt-account-123');
-    expect(secondOptions.headers.Version || secondOptions.headers.version).toBe('0.137.0');
+    expect(secondOptions.headers.Version || secondOptions.headers.version).toBe(CODEX_CLIENT_VERSION);
     expect(String(secondOptions.headers.Session_id || secondOptions.headers.session_id || '')).toMatch(/^[0-9a-f-]{36}$/i);
     expect(secondOptions.headers.Conversation_id || secondOptions.headers.conversation_id).toBeUndefined();
-    expect(secondOptions.headers['User-Agent'] || secondOptions.headers['user-agent']).toContain('codex_cli_rs/0.137.0');
+    expect(secondOptions.headers['User-Agent'] || secondOptions.headers['user-agent']).toContain(`codex_cli_rs/${CODEX_CLIENT_VERSION}`);
     expect(secondOptions.headers.Accept || secondOptions.headers.accept).toBe('text/event-stream');
     expect(secondOptions.headers.Connection || secondOptions.headers.connection).toBe('Keep-Alive');
     expect(response.json()?.output_text).toContain('ok after codex token refresh');
@@ -1101,7 +1102,7 @@ describe('responses proxy codex oauth refresh', () => {
     const [, options] = fetchMock.mock.calls[0] as [string, any];
     expect(options.headers.Version || options.headers.version).toBe('0.202.0');
     expect(options.headers.Session_id || options.headers.session_id).toBe('session-from-client');
-    expect(options.headers['User-Agent'] || options.headers['user-agent']).toContain('codex_cli_rs/0.137.0');
+    expect(options.headers['User-Agent'] || options.headers['user-agent']).toContain(`codex_cli_rs/${CODEX_CLIENT_VERSION}`);
     expect(options.headers['openai-beta']).toBeUndefined();
     expect(options.headers['x-openai-client-user-agent']).toBeUndefined();
     expect(options.headers.origin).toBeUndefined();

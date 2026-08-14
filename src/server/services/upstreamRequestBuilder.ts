@@ -23,6 +23,7 @@ import {
   uuidFromSeed,
 } from '../proxy-core/providers/headerUtils.js';
 import { isCodexCompatibleSdkUserAgent, isOpenAiSdkUserAgent } from '../shared/openAiSdkClient.js';
+import { CODEX_DESKTOP_COMPAT_USER_AGENT } from '../shared/codexClientDefaults.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object';
@@ -95,7 +96,6 @@ const METAPI_INTERNAL_HEADER_BLOCKLIST = new Set([
   'x-metapi-responses-websocket-transport',
 ]);
 const METAPI_PROXY_USER_AGENT = 'metapi/1.0';
-const CODEX_DESKTOP_COMPAT_USER_AGENT = 'Codex Desktop/0.147.0-alpha.6.6 (Windows 10.0.28000; x86_64) unknown (Codex Desktop; 26.803.81509)';
 const CODEX_DESKTOP_COMPAT_ORIGINATOR = 'Codex Desktop';
 const CODEX_DESKTOP_COMPAT_BETA_FEATURES = 'remote_compaction_v2';
 const CODEX_DESKTOP_COMPAT_PLATFORMS = new Set([

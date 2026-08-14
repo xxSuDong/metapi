@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { config } from '../../config.js';
+import { CODEX_CLIENT_VERSION, CODEX_DEFAULT_USER_AGENT } from '../../shared/codexClientDefaults.js';
 
 const fetchModelPricingCatalogMock = vi.fn(async (_arg?: unknown): Promise<any> => null);
 
@@ -916,7 +917,7 @@ describe('buildUpstreamEndpointRequest', () => {
 
     expect(request.headers.Version).toBe('0.202.0');
     expect(request.headers.Session_id).toBe('session-from-client');
-    expect(request.headers['User-Agent']).toContain('codex_cli_rs/0.137.0');
+    expect(request.headers['User-Agent']).toContain(`codex_cli_rs/${CODEX_CLIENT_VERSION}`);
     expect(request.headers['x-responsesapi-include-timing-metrics']).toBe('1');
     expect(request.headers.origin).toBeUndefined();
     expect(request.headers.referer).toBeUndefined();
@@ -952,10 +953,10 @@ describe('buildUpstreamEndpointRequest', () => {
     expect(request.headers.Authorization).toBe('Bearer oauth-access-token');
     expect(request.headers.Originator).toBe('codex_cli_rs');
     expect(request.headers['Chatgpt-Account-Id']).toBe('chatgpt-account-123');
-    expect(request.headers.Version).toBe('0.137.0');
+    expect(request.headers.Version).toBe(CODEX_CLIENT_VERSION);
     expect(request.headers.Session_id).toMatch(/^[0-9a-f-]{36}$/i);
     expect(request.headers.Conversation_id).toBe(request.headers.Session_id);
-    expect(request.headers['User-Agent']).toBe('codex_cli_rs/0.137.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464');
+    expect(request.headers['User-Agent']).toBe(CODEX_DEFAULT_USER_AGENT);
     expect(request.headers.Accept).toBe('application/json');
     expect(request.headers.Connection).toBe('Keep-Alive');
     expect(request.body.instructions).toBe(CODEX_DEFAULT_INSTRUCTIONS);
