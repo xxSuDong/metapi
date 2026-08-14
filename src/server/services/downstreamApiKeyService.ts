@@ -7,6 +7,10 @@ import {
   type DownstreamExcludedCredentialRef,
   type DownstreamRoutingPolicy,
 } from './downstreamPolicyTypes.js';
+import {
+  hasSharedDynamicPassthroughModelFamily,
+  isSafeDynamicPassthroughModelName,
+} from './dynamicModelPassthrough.js';
 
 export type DownstreamApiKeyRow = typeof schema.downstreamApiKeys.$inferSelect;
 
@@ -321,7 +325,18 @@ async function isModelMatchedByAllowedRoutes(model: string, allowedRouteIds: num
     ))
     .all();
 
-  return routes.some((route) => getExposedRouteName(route) === model);
+  if (routes.some((route) => getExposedRouteName(route) === model)) {
+    return true;
+  }
+
+  if (!isSafeDynamicPassthroughModelName(model)) {
+    return false;
+  }
+
+  return routes.some((route) => (
+    hasSharedDynamicPassthroughModelFamily(model, route.modelPattern)
+    || hasSharedDynamicPassthroughModelFamily(model, route.displayName || '')
+  ));
 }
 
 export async function isModelAllowedByPolicyOrAllowedRoutes(model: string, policy: DownstreamRoutingPolicy): Promise<boolean> {

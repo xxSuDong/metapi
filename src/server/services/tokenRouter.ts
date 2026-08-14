@@ -35,6 +35,10 @@ import {
   type RouteDecisionCandidate,
   type RouteMode,
 } from '../../shared/tokenRouteContract.js';
+import {
+  isSafeDynamicPassthroughModelName,
+  resolveDynamicPassthroughPriority,
+} from './dynamicModelPassthrough.js';
 
 interface RouteMatch {
   route: RouteRow;
@@ -259,6 +263,11 @@ const STABLE_FIRST_TRUSTED_RECENT_CONFIDENCE = 0.5;
 const STABLE_FIRST_TRUSTED_HISTORICAL_CALLS = 8;
 const STABLE_FIRST_OBSERVATION_REQUEST_INTERVAL = 24;
 const STABLE_FIRST_OBSERVATION_SITE_COOLDOWN_MS = 30 * 60 * 1000;
+const DYNAMIC_PASSTHROUGH_ROUTE_ID = -1;
+
+function isDynamicPassthroughRoute(route: Pick<RouteRow, 'id'>): boolean {
+  return route.id === DYNAMIC_PASSTHROUGH_ROUTE_ID;
+}
 
 function rememberStableFirstSiteSelectionForKey(rotationKey: string, siteId: number): void {
   if (!rotationKey || !Number.isFinite(siteId) || siteId <= 0) return;
@@ -1847,6 +1856,116 @@ function isExplicitTokenChannel(candidate: RouteChannelCandidate): boolean {
   return typeof candidate.channel.tokenId === 'number' && candidate.channel.tokenId > 0;
 }
 
+function buildDynamicPassthroughRoute(requestedModel: string): RouteRow {
+  const nowIso = new Date().toISOString();
+  return {
+    id: DYNAMIC_PASSTHROUGH_ROUTE_ID,
+    modelPattern: requestedModel,
+    displayName: null,
+    displayIcon: null,
+    routeMode: 'pattern',
+    modelMapping: null,
+    decisionSnapshot: null,
+    decisionRefreshedAt: null,
+    routingStrategy: 'weighted',
+    enabled: true,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    sourceRouteIds: [],
+  };
+}
+
+async function loadDynamicPassthroughRouteMatch(
+  requestedModel: string,
+  routes: RouteRow[],
+  options: { requireFamilyMatch?: boolean } = {},
+): Promise<RouteMatch | null> {
+  if (!isSafeDynamicPassthroughModelName(requestedModel)) return null;
+
+  const sourceRoutes = routes.filter((route) => (
+    !isExplicitGroupRoute(route)
+    && isExactRouteModelPattern(route.modelPattern)
+    && (route.modelPattern || '').trim().length > 0
+  ));
+  const sourceRouteIds = sourceRoutes.map((route) => route.id);
+  if (sourceRouteIds.length === 0) return null;
+
+  const sourceModelByRouteId = new Map<number, string>(
+    sourceRoutes.map((route) => [route.id, (route.modelPattern || '').trim()]),
+  );
+  const rows = await db
+    .select()
+    .from(schema.routeChannels)
+    .innerJoin(schema.accounts, eq(schema.routeChannels.accountId, schema.accounts.id))
+    .innerJoin(schema.sites, eq(schema.accounts.siteId, schema.sites.id))
+    .leftJoin(schema.accountTokens, eq(schema.routeChannels.tokenId, schema.accountTokens.id))
+    .where(inArray(schema.routeChannels.routeId, sourceRouteIds))
+    .all();
+
+  const scoredRows = rows.map((row) => {
+    const sourceModel = normalizeChannelSourceModel(row.route_channels.sourceModel)
+      || sourceModelByRouteId.get(row.route_channels.routeId)
+      || '';
+    const dynamicPriority = resolveDynamicPassthroughPriority({
+      requestedModel,
+      sourceModel,
+      sitePlatform: row.sites.platform,
+    });
+    return dynamicPriority ? { row, sourceModel, dynamicPriority } : null;
+  }).filter((item): item is NonNullable<typeof item> => !!item);
+
+  if (scoredRows.length === 0) return null;
+
+  const hasFamilyMatchedRows = scoredRows.some((item) => item.dynamicPriority.familyMatched);
+  if (options.requireFamilyMatch && !hasFamilyMatchedRows) {
+    return null;
+  }
+  const candidateRows = hasFamilyMatchedRows
+    ? scoredRows.filter((item) => item.dynamicPriority.familyMatched)
+    : scoredRows;
+
+  const oauthRouteUnitIds: number[] = Array.from(new Set<number>(
+    candidateRows
+      .map((item) => Number(item.row.route_channels.oauthRouteUnitId))
+      .filter((id): id is number => Number.isFinite(id) && id > 0),
+  ));
+  const [routeUnitSummaries, routeUnitMembersByUnitId] = await Promise.all([
+    loadOauthRouteUnitSummariesByIds(oauthRouteUnitIds),
+    listOauthRouteUnitMembersByUnitIds(oauthRouteUnitIds),
+  ]);
+
+  const channels = candidateRows.map((item) => ({
+    channel: {
+      ...item.row.route_channels,
+      // Dynamic passthrough keeps the downstream model untouched. The source model is
+      // used only for selecting likely sibling channels, not for rewriting the request.
+      sourceModel: null,
+      priority: (item.row.route_channels.priority ?? 0) + item.dynamicPriority.priorityOffset,
+    },
+    account: item.row.accounts,
+    site: item.row.sites,
+    token: item.row.account_tokens,
+    routeUnit: item.row.route_channels.oauthRouteUnitId
+      ? (routeUnitSummaries.get(item.row.route_channels.oauthRouteUnitId) || null)
+      : null,
+    routeUnitMembers: item.row.route_channels.oauthRouteUnitId
+      ? (routeUnitMembersByUnitId.get(item.row.route_channels.oauthRouteUnitId) || []).map((member) => ({
+        member: member.member,
+        account: member.account,
+        site: member.site,
+        token: null,
+      }))
+      : [],
+  }));
+
+  if (channels.length === 0) return null;
+
+  return {
+    route: buildDynamicPassthroughRoute(requestedModel),
+    channels,
+  };
+}
+
 export class TokenRouter {
   /**
    * Find matching route and select a channel for the given model.
@@ -1994,7 +2113,9 @@ export class TokenRouter {
     }
 
     const requestedByDisplayName = isRouteDisplayNameMatch(requestedModel, match.route.displayName);
-    const bypassSourceModelCheck = (options.bypassSourceModelCheck ?? false) || requestedByDisplayName;
+    const bypassSourceModelCheck = (options.bypassSourceModelCheck ?? false)
+      || requestedByDisplayName
+      || isDynamicPassthroughRoute(match.route);
     const useChannelSourceModelForCost = (options.useChannelSourceModelForCost ?? false) || requestedByDisplayName;
     const mappedModel = resolveMappedModel(requestedModel, match.route.modelMapping);
     const routeStrategy = resolveRouteStrategy(match.route);
@@ -2860,7 +2981,7 @@ export class TokenRouter {
   ): Promise<SelectedChannel | null> {
     const mappedModel = resolveMappedModel(requestedModel, match.route.modelMapping);
     const requestedByDisplayName = isRouteDisplayNameMatch(requestedModel, match.route.displayName);
-    const bypassSourceModelCheck = requestedByDisplayName;
+    const bypassSourceModelCheck = requestedByDisplayName || isDynamicPassthroughRoute(match.route);
     const routeStrategy = resolveRouteStrategy(match.route);
     const runtimeModelResolver = requestedByDisplayName
       ? ((candidate: RouteChannelCandidate) => normalizeChannelSourceModel(candidate.channel.sourceModel) || mappedModel)
@@ -3009,7 +3130,7 @@ export class TokenRouter {
   ): Promise<SelectedChannel | null> {
     const mappedModel = resolveMappedModel(requestedModel, match.route.modelMapping);
     const requestedByDisplayName = isRouteDisplayNameMatch(requestedModel, match.route.displayName);
-    const bypassSourceModelCheck = requestedByDisplayName;
+    const bypassSourceModelCheck = requestedByDisplayName || isDynamicPassthroughRoute(match.route);
     const routeStrategy = resolveRouteStrategy(match.route);
     const runtimeModelResolver = requestedByDisplayName
       ? ((candidate: RouteChannelCandidate) => normalizeChannelSourceModel(candidate.channel.sourceModel) || mappedModel)
@@ -3076,7 +3197,11 @@ export class TokenRouter {
       || routes.find((route) => !isExplicitGroupRoute(route) && isRouteDisplayNameMatch(model, route.displayName))
       || routes.find((route) => !isExplicitGroupRoute(route) && matchesModelPattern(model, route.modelPattern));
 
-    if (!matchedRoute) return null;
+    if (!matchedRoute) {
+      return await loadDynamicPassthroughRouteMatch(model, routes, {
+        requireFamilyMatch: downstreamPolicy.allowedRouteIds.length > 0 && !matchedSupportedPattern,
+      });
+    }
 
     return await this.loadRouteMatch(matchedRoute);
   }
